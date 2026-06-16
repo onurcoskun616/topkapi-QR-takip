@@ -9,4 +9,7 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.1.3
 python-multipart==0.0.9
 apscheduler==3.10.4
+# Pin tzlocal (an APScheduler dependency): 5.3+ shipped broken/empty wheels that
+# install but expose no module, breaking "import apscheduler". 5.2 is stable.
+tzlocal==5.2
 email-validator==2.1.1
