@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Topkapı Yoklama",
+    "slug": "topkapi-qr-attendance",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "topkapiqr",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0b1f3a"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "QR kodu okutarak giriş/çıkış yapmak için kamera erişimi gereklidir."
+      }
+    },
+    "android": {
+      "permissions": ["CAMERA"]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "QR kodu okutarak giriş/çıkış yapmak için kamera erişimi gereklidir."
+        }
+      ]
+    ],
+    "extra": {
+      "apiBaseUrl": "http://localhost:8000"
+    }
+  }
+}
