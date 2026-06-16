@@ -8,6 +8,9 @@ venv/
 
 # Env / secrets
 .env
+.env.*
+!.env.example
+!.env.prod.example
 *.local
 
 # Node

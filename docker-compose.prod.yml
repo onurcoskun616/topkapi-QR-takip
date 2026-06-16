@@ -1,0 +1,87 @@
+# Production stack for the Topkapı QR Attendance system.
+#
+#   1. Copy .env.prod.example -> .env.prod and fill in real values.
+#   2. Point your DNS A records (api / kiosk / panel subdomains) at this host.
+#   3. docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# Caddy terminates TLS and obtains/renews Let's Encrypt certificates
+# automatically (ports 80 and 443 must be open to the internet).
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      AUTH_SECRET: ${AUTH_SECRET}
+      QR_SECRET: ${QR_SECRET}
+      QR_TOKEN_TTL_SECONDS: ${QR_TOKEN_TTL_SECONDS:-15}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-720}
+      ATTENDANCE_TIMEZONE: ${ATTENDANCE_TIMEZONE:-Europe/Istanbul}
+      CORS_ORIGINS: "https://${KIOSK_DOMAIN},https://${PANEL_DOMAIN}"
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-System Admin}
+    # Not exposed to the host: only Caddy talks to it over the internal network.
+    expose:
+      - "8000"
+
+  kiosk:
+    build:
+      context: ./kiosk-app
+      args:
+        VITE_API_BASE_URL: "https://${API_DOMAIN}"
+    restart: unless-stopped
+    expose:
+      - "80"
+
+  admin:
+    build:
+      context: ./admin-app
+      args:
+        VITE_API_BASE_URL: "https://${API_DOMAIN}"
+    restart: unless-stopped
+    expose:
+      - "80"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - kiosk
+      - admin
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+      KIOSK_DOMAIN: ${KIOSK_DOMAIN}
+      PANEL_DOMAIN: ${PANEL_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
