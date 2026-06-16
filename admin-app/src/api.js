@@ -21,8 +21,7 @@ async function request(path, { method = "GET", body, token } = {}) {
   }
 
   if (!res.ok) {
-    const detail =
-      (data && data.detail) || `İstek başarısız (${res.status})`;
+    const detail = (data && data.detail) || `İstek başarısız (${res.status})`;
     const err = new Error(detail);
     err.status = res.status;
     throw err;
@@ -30,7 +29,17 @@ async function request(path, { method = "GET", body, token } = {}) {
   return data;
 }
 
+const qs = (params) => {
+  const sp = new URLSearchParams();
+  Object.entries(params || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") sp.set(k, v);
+  });
+  const s = sp.toString();
+  return s ? `?${s}` : "";
+};
+
 export const api = {
+  // --- auth ---------------------------------------------------------------
   login: (email, password, deviceFingerprint) =>
     request("/api/auth/login", {
       method: "POST",
@@ -45,34 +54,54 @@ export const api = {
 
   me: (token) => request("/api/auth/me", { token }),
 
-  listUsers: (token) => request("/api/auth/users", { token }),
+  // --- campuses -----------------------------------------------------------
+  campuses: () => request("/api/campuses"),
 
-  createUser: (token, payload) =>
-    request("/api/auth/users", { method: "POST", token, body: payload }),
+  // --- staff management (director: own campus, hq: all/filter) ------------
+  listStaff: (token, { status, campusId } = {}) =>
+    request(`/api/staff${qs({ status, campus_id: campusId })}`, { token }),
 
-  todaySummary: (token) => request("/api/logs/summary/today", { token }),
+  approveStaff: (token, id) =>
+    request(`/api/staff/${id}/approve`, { method: "POST", token }),
 
-  logs: (token, { userId, day, limit = 200 } = {}) => {
-    const qs = new URLSearchParams();
-    if (userId) qs.set("user_id", userId);
-    if (day) qs.set("day", day);
-    qs.set("limit", limit);
-    return request(`/api/logs?${qs.toString()}`, { token });
-  },
+  disableStaff: (token, id) =>
+    request(`/api/staff/${id}/disable`, { method: "POST", token }),
+
+  resetDevice: (token, id) =>
+    request(`/api/staff/${id}/reset-device`, { method: "POST", token }),
+
+  updateStaff: (token, id, payload) =>
+    request(`/api/staff/${id}`, { method: "PATCH", token, body: payload }),
+
+  // --- directors (hq only) ------------------------------------------------
+  listDirectors: (token) => request("/api/directors", { token }),
+
+  createDirector: (token, payload) =>
+    request("/api/directors", { method: "POST", token, body: payload }),
+
+  disableDirector: (token, id) =>
+    request(`/api/directors/${id}/disable`, { method: "POST", token }),
+
+  // --- reporting ----------------------------------------------------------
+  todaySummary: (token, { campusId } = {}) =>
+    request(`/api/logs/summary/today${qs({ campus_id: campusId })}`, { token }),
+
+  logs: (token, { userId, campusId, day, limit = 200 } = {}) =>
+    request(
+      `/api/logs${qs({ user_id: userId, campus_id: campusId, day, limit })}`,
+      { token }
+    ),
 
   runAutoClose: (token) =>
     request("/api/admin/run-auto-close", { method: "POST", token }),
 };
 
 /** Trigger a browser download of the CSV export with auth header. */
-export async function downloadCsv(token, { userId, day } = {}) {
-  const qs = new URLSearchParams();
-  if (userId) qs.set("user_id", userId);
-  if (day) qs.set("day", day);
-
-  const res = await fetch(`${API_BASE_URL}/api/logs/export?${qs.toString()}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+export async function downloadCsv(token, { userId, campusId, day } = {}) {
+  const res = await fetch(
+    `${API_BASE_URL}/api/logs/export${qs({ user_id: userId, campus_id: campusId, day })}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
   if (!res.ok) throw new Error(`CSV dışa aktarım başarısız (${res.status})`);
 
   const blob = await res.blob();

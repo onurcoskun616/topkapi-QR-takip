@@ -6,10 +6,14 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .bootstrap import create_tables, ensure_bootstrap_admin
+from .bootstrap import (
+    create_tables,
+    ensure_bootstrap_admin,
+    ensure_campuses,
+)
 from .config import settings
-from .deps import get_current_admin
-from .routers import auth, logs, qr, scan
+from .deps import get_current_hq
+from .routers import auth, campuses, logs, management, qr, scan
 from .tasks.scheduler import (
     auto_close_open_attendances,
     shutdown_scheduler,
@@ -22,6 +26,7 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await create_tables()
+    await ensure_campuses()
     await ensure_bootstrap_admin()
     start_scheduler()
     try:
@@ -45,6 +50,8 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(campuses.router)
+app.include_router(management.router)
 app.include_router(qr.router)
 app.include_router(scan.router)
 app.include_router(logs.router)
@@ -59,7 +66,7 @@ async def health():
 admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
-@admin_router.post("/run-auto-close", dependencies=[Depends(get_current_admin)])
+@admin_router.post("/run-auto-close", dependencies=[Depends(get_current_hq)])
 async def run_auto_close():
     closed = await auto_close_open_attendances()
     return {"auto_closed": closed}

@@ -1,4 +1,5 @@
 """Business logic shared by routes and the scheduler."""
+import re
 from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
@@ -7,6 +8,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
 from .models import AttendanceLog, AttendanceStatus, AttendanceType
+
+
+def normalize_phone(raw: str) -> str:
+    """Canonicalise a phone number so the same line always maps to one identity.
+
+    Strips spaces/dashes/parentheses, keeps a single leading ``+``, and converts
+    a Turkish national ``0XXXXXXXXXX`` to ``+90XXXXXXXXXX`` so "0532…" and
+    "+90 532…" are treated as the same person.
+    """
+    digits = re.sub(r"[^\d+]", "", raw or "")
+    if digits.startswith("00"):
+        digits = "+" + digits[2:]
+    if digits.startswith("0") and len(digits) == 11:  # 05XXXXXXXXX
+        digits = "+90" + digits[1:]
+    elif digits.startswith("90") and len(digits) == 12:
+        digits = "+" + digits
+    return digits
 
 
 def local_day_bounds_utc(now_utc: datetime) -> tuple[datetime, datetime]:

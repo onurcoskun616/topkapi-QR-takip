@@ -17,7 +17,7 @@ from app.security import (
     decode_refresh_token,
     sha256_hex,
 )
-from app.services import next_attendance_type
+from app.services import next_attendance_type, normalize_phone
 
 
 class _FakeLog:
@@ -55,7 +55,7 @@ def test_expired_qr_token_rejected(monkeypatch):
 
 
 def test_access_token_carries_session_id():
-    token = create_access_token(user_id=42, role="teacher", session_id=9)
+    token = create_access_token(user_id=42, role="staff", session_id=9)
     claims = decode_access_token(token)
     assert claims["sub"] == "42"
     assert claims["sid"] == 9
@@ -81,6 +81,19 @@ def test_sha256_hex_is_stable_and_sized():
     assert sha256_hex("device-abc") == sha256_hex("device-abc")
     assert sha256_hex("a") != sha256_hex("b")
     assert len(sha256_hex("x")) == 64
+
+
+def test_normalize_phone_unifies_turkish_formats():
+    # "0532…", "+90 532…" and "90532…" all map to the same canonical identity.
+    canonical = "+905321234567"
+    assert normalize_phone("0532 123 45 67") == canonical
+    assert normalize_phone("+90 532 123 45 67") == canonical
+    assert normalize_phone("90532-123-4567") == canonical
+    assert normalize_phone("(0532) 123 45 67") == canonical
+
+
+def test_normalize_phone_keeps_distinct_numbers_distinct():
+    assert normalize_phone("0532 111 11 11") != normalize_phone("0532 222 22 22")
 
 
 def test_qr_token_uses_server_clock_not_client(monkeypatch):

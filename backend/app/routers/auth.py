@@ -1,12 +1,17 @@
-"""Authentication routes for the device-bound, dual-token security model.
+"""Authentication routes.
 
-Flow:
-  * **login**   — verify credentials, then revoke the account's previous
-    sessions (single-device rule) and issue a 15-min access token plus a
-    365-day refresh token bound to the supplied device fingerprint.
-  * **refresh** — the PWA's silent morning refresh: present the refresh token
-    + device fingerprint, get a fresh access token without re-entering a
-    password. A fingerprint/session mismatch fails (stolen-token defence).
+Two credential models share one device-bound, dual-token session system:
+
+  * **Staff (personnel)** — passwordless. They self-register from the PWA with
+    their profile + phone number; that phone number is their permanent identity
+    and the registering device is locked to it. New accounts start ``pending``
+    until a campus director approves them. A new phone can only re-claim the
+    identity after a director clears the old device ("cihaz sıfırlama").
+  * **Managers (director / hq)** — classic email + password login.
+
+Both paths then use:
+  * **refresh** — silent morning refresh: refresh token + matching device
+    fingerprint → fresh access token, no re-entry.
   * **logout**  — revoke the current session.
 """
 from datetime import datetime, timezone
@@ -18,14 +23,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..database import get_db
-from ..deps import get_current_admin, get_current_user, oauth2_scheme
-from ..models import Session, User
+from ..deps import get_current_user, oauth2_scheme
+from ..models import Campus, Session, User, UserRole, UserStatus, ensure_aware
 from ..schemas import (
     AccessTokenResponse,
     LoginRequest,
     RefreshRequest,
+    RegisterRequest,
     TokenResponse,
-    UserCreate,
     UserResponse,
 )
 from ..security import (
@@ -37,6 +42,8 @@ from ..security import (
     sha256_hex,
     verify_password,
 )
+from ..serializers import to_user_response
+from ..services import normalize_phone
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -45,6 +52,26 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 _DUMMY_PASSWORD_HASH = hash_password("topkapi-invalid-login-placeholder")
 
 _access_ttl_seconds = settings.access_token_expire_minutes * 60
+
+
+async def _campus_name(db: AsyncSession, campus_id: int | None) -> str | None:
+    if campus_id is None:
+        return None
+    campus = await db.get(Campus, campus_id)
+    return campus.name if campus else None
+
+
+async def _has_active_session(db: AsyncSession, user_id: int) -> bool:
+    """True if the account currently has a non-expired, non-revoked device bound."""
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(Session.id).where(
+            Session.user_id == user_id,
+            Session.revoked.is_(False),
+            Session.expires_at > now,
+        )
+    )
+    return result.first() is not None
 
 
 async def _issue_session(
@@ -75,20 +102,89 @@ async def _issue_session(
     return access, refresh["token"]
 
 
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    """Staff self-registration (and new-phone re-claim) — passwordless.
+
+    * New phone number  → create a ``pending`` account on the chosen campus.
+    * Known phone number with **no** bound device (a director reset it) →
+      re-bind this device to the existing identity, keeping history & approval.
+    * Known phone number that is still bound to a device → refuse; the staff
+      member must ask their director to reset the old phone first.
+    """
+    campus = await db.get(Campus, payload.campus_id)
+    if campus is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz kampüs seçimi."
+        )
+
+    phone = normalize_phone(payload.phone)
+    if len(phone) < 7:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz telefon numarası."
+        )
+
+    existing = await db.execute(select(User).where(User.phone == phone))
+    user = existing.scalar_one_or_none()
+
+    if user is not None:
+        if user.role != UserRole.staff or user.status == UserStatus.disabled:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Bu telefon numarası kullanılamıyor. Müdürünüze başvurun.",
+            )
+        if await _has_active_session(db, user.id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Bu telefon numarası başka bir cihaza tanımlı. Yeni telefon "
+                    "için müdürünüzden cihaz sıfırlaması isteyin."
+                ),
+            )
+        # Re-claim: same identity, new device. Keep approval status & campus.
+    else:
+        user = User(
+            full_name=payload.full_name.strip(),
+            phone=phone,
+            job_title=payload.job_title.strip(),
+            branch=payload.branch.strip(),
+            role=UserRole.staff,
+            status=UserStatus.pending,
+            campus_id=campus.id,
+        )
+        db.add(user)
+        await db.flush()  # assigns user.id
+
+    access, refresh = await _issue_session(db, user, payload.device_fingerprint)
+    return TokenResponse(
+        access_token=access,
+        refresh_token=refresh,
+        access_expires_in=_access_ttl_seconds,
+        user=to_user_response(user, campus_name=campus.name, has_device=True),
+    )
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
+    """Manager (campus director / hq) login with email + password."""
     result = await db.execute(select(User).where(User.email == payload.email.lower()))
     user = result.scalar_one_or_none()
 
     # Always run a bcrypt verification — against a dummy hash when the email is
     # unknown — so response time does not reveal whether an account exists.
     valid = verify_password(
-        payload.password, user.password_hash if user else _DUMMY_PASSWORD_HASH
+        payload.password, user.password_hash if user and user.password_hash else _DUMMY_PASSWORD_HASH
     )
-    if not user or not valid or not user.is_active:
+    if (
+        not user
+        or not user.password_hash
+        or not valid
+        or user.role not in (UserRole.campus_director, UserRole.hq)
+        or user.status != UserStatus.active
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            detail="E-posta veya şifre hatalı.",
         )
 
     access, refresh = await _issue_session(db, user, payload.device_fingerprint)
@@ -96,7 +192,9 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
         access_token=access,
         refresh_token=refresh,
         access_expires_in=_access_ttl_seconds,
-        user=UserResponse.model_validate(user),
+        user=to_user_response(
+            user, campus_name=await _campus_name(db, user.campus_id), has_device=True
+        ),
     )
 
 
@@ -122,7 +220,7 @@ async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
         session is None
         or session.user_id != user_id
         or session.revoked
-        or session.expires_at <= now
+        or ensure_aware(session.expires_at) <= now
         # The presented refresh token must be the one bound to this session
         # (a login on another device replaced it).
         or session.refresh_token_hash != sha256_hex(payload.refresh_token)
@@ -132,7 +230,7 @@ async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
         raise invalid
 
     user = await db.get(User, user_id)
-    if user is None or not user.is_active:
+    if user is None or user.status == UserStatus.disabled:
         raise invalid
 
     session.last_used_at = now
@@ -143,7 +241,9 @@ async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
     return AccessTokenResponse(
         access_token=access,
         access_expires_in=_access_ttl_seconds,
-        user=UserResponse.model_validate(user),
+        user=to_user_response(
+            user, campus_name=await _campus_name(db, user.campus_id), has_device=True
+        ),
     )
 
 
@@ -163,43 +263,12 @@ async def logout(
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(current: User = Depends(get_current_user)):
-    return current
-
-
-@router.get(
-    "/users",
-    response_model=list[UserResponse],
-    dependencies=[Depends(get_current_admin)],
-)
-async def list_users(db: AsyncSession = Depends(get_db)):
-    """Admin-only: list all accounts (for the admin panel)."""
-    result = await db.execute(select(User).order_by(User.full_name))
-    return list(result.scalars().all())
-
-
-@router.post(
-    "/users",
-    response_model=UserResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(get_current_admin)],
-)
-async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
-    """Admin-only: register a new teacher/admin account."""
-    email = payload.email.lower()
-    existing = await db.execute(select(User).where(User.email == email))
-    if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
-        )
-
-    user = User(
-        full_name=payload.full_name,
-        email=email,
-        password_hash=hash_password(payload.password),
-        role=payload.role,
+async def me(
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return to_user_response(
+        current,
+        campus_name=await _campus_name(db, current.campus_id),
+        has_device=True,
     )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user

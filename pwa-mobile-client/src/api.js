@@ -17,26 +17,28 @@ async function parse(res) {
   return data;
 }
 
+const json = (path, body) =>
+  fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(parse);
+
 export const api = {
-  login: (email, password, deviceFingerprint) =>
-    fetch(`${API_BASE_URL}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        password,
-        device_fingerprint: deviceFingerprint,
-      }),
-    }).then(parse),
+  campuses: () => fetch(`${API_BASE_URL}/api/campuses`).then(parse),
+
+  // Staff self-registration / new-phone re-claim (passwordless, device-bound).
+  register: (payload) => json("/api/auth/register", payload),
 
   refresh: (refreshToken, deviceFingerprint) =>
-    fetch(`${API_BASE_URL}/api/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        refresh_token: refreshToken,
-        device_fingerprint: deviceFingerprint,
-      }),
+    json("/api/auth/refresh", {
+      refresh_token: refreshToken,
+      device_fingerprint: deviceFingerprint,
+    }),
+
+  me: (accessToken) =>
+    fetch(`${API_BASE_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
     }).then(parse),
 
   logout: (accessToken) =>

@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useAuth } from "./auth";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
-import Users from "./components/Users";
+import Staff from "./components/Staff";
+import Directors from "./components/Directors";
 
 export default function App() {
   const { isAuthed, loading, user, logout } = useAuth();
@@ -15,12 +16,15 @@ export default function App() {
     return <Login />;
   }
 
+  const isHq = user?.role === "hq";
+  const scopeLabel = isHq ? "Genel Merkez" : user?.campus_name || "Kampüs";
+
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="brand__mark">●</span> Topkapı Yoklama —
-          Yönetim Paneli
+          <span className="brand__mark">●</span> Topkapı Yoklama —{" "}
+          {isHq ? "Genel Merkez" : "Kampüs Paneli"}
         </div>
         <nav className="tabs">
           <button
@@ -30,13 +34,22 @@ export default function App() {
             Gösterge Paneli
           </button>
           <button
-            className={tab === "users" ? "tab tab--active" : "tab"}
-            onClick={() => setTab("users")}
+            className={tab === "staff" ? "tab tab--active" : "tab"}
+            onClick={() => setTab("staff")}
           >
-            Kullanıcılar
+            Personel
           </button>
+          {isHq && (
+            <button
+              className={tab === "directors" ? "tab tab--active" : "tab"}
+              onClick={() => setTab("directors")}
+            >
+              Müdürler
+            </button>
+          )}
         </nav>
         <div className="topbar__right">
+          <span className="badge badge--in">{scopeLabel}</span>
           <span className="muted">{user?.full_name}</span>
           <button className="btn btn--ghost" onClick={logout}>
             Çıkış
@@ -45,7 +58,9 @@ export default function App() {
       </header>
 
       <main className="content">
-        {tab === "dashboard" ? <Dashboard /> : <Users />}
+        {tab === "dashboard" && <Dashboard isHq={isHq} />}
+        {tab === "staff" && <Staff isHq={isHq} />}
+        {tab === "directors" && isHq && <Directors />}
       </main>
     </div>
   );

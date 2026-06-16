@@ -2,21 +2,23 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 
-const EMPTY = { full_name: "", email: "", password: "", role: "teacher" };
+const EMPTY = { full_name: "", email: "", password: "", campus_id: "" };
 
-export default function Users() {
+export default function Directors() {
   const { token } = useAuth();
-  const [users, setUsers] = useState([]);
+  const [directors, setDirectors] = useState([]);
+  const [campuses, setCampuses] = useState([]);
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const load = () =>
-    api.listUsers(token).then(setUsers).catch((e) => setError(e.message));
+    api.listDirectors(token).then(setDirectors).catch((e) => setError(e.message));
 
   useEffect(() => {
     load();
+    api.campuses().then(setCampuses).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -28,8 +30,11 @@ export default function Users() {
     setError(null);
     setNotice(null);
     try {
-      const created = await api.createUser(token, form);
-      setNotice(`${created.full_name} oluşturuldu.`);
+      const created = await api.createDirector(token, {
+        ...form,
+        campus_id: Number(form.campus_id),
+      });
+      setNotice(`${created.full_name} (müdür) oluşturuldu.`);
       setForm(EMPTY);
       await load();
     } catch (err) {
@@ -39,10 +44,20 @@ export default function Users() {
     }
   };
 
+  const disable = async (d) => {
+    if (!window.confirm(`${d.full_name} müdür hesabı devre dışı bırakılsın mı?`)) return;
+    try {
+      await api.disableDirector(token, d.id);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   return (
     <div className="stack two-col">
       <section className="card">
-        <h2 className="card__title">Yeni Kullanıcı</h2>
+        <h2 className="card__title">Yeni Kampüs Müdürü</h2>
         <form className="stack" onSubmit={onSubmit}>
           <label className="field">
             <span>Ad Soyad</span>
@@ -50,12 +65,7 @@ export default function Users() {
           </label>
           <label className="field">
             <span>E-posta</span>
-            <input
-              type="email"
-              value={form.email}
-              onChange={onChange("email")}
-              required
-            />
+            <input type="email" value={form.email} onChange={onChange("email")} required />
           </label>
           <label className="field">
             <span>Şifre (min 8)</span>
@@ -68,10 +78,14 @@ export default function Users() {
             />
           </label>
           <label className="field">
-            <span>Rol</span>
-            <select value={form.role} onChange={onChange("role")}>
-              <option value="teacher">Öğretmen</option>
-              <option value="admin">Yönetici</option>
+            <span>Kampüs</span>
+            <select value={form.campus_id} onChange={onChange("campus_id")} required>
+              <option value="">Kampüs seçin…</option>
+              {campuses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </select>
           </label>
 
@@ -85,29 +99,39 @@ export default function Users() {
       </section>
 
       <section className="card">
-        <h2 className="card__title">Kullanıcılar ({users.length})</h2>
+        <h2 className="card__title">Kampüs Müdürleri ({directors.length})</h2>
         <div className="table-wrap">
           <table className="table">
             <thead>
               <tr>
                 <th>Ad Soyad</th>
                 <th>E-posta</th>
-                <th>Rol</th>
+                <th>Kampüs</th>
+                <th>Durum</th>
+                <th>İşlem</th>
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td>{u.full_name}</td>
-                  <td className="muted small">{u.email}</td>
+              {directors.map((d) => (
+                <tr key={d.id}>
+                  <td>{d.full_name}</td>
+                  <td className="muted small">{d.email}</td>
+                  <td>{d.campus_name || "—"}</td>
                   <td>
                     <span
                       className={
-                        u.role === "admin" ? "badge badge--auto" : "badge badge--in"
+                        d.status === "active" ? "badge badge--in" : "badge badge--out"
                       }
                     >
-                      {u.role === "admin" ? "Yönetici" : "Öğretmen"}
+                      {d.status === "active" ? "Aktif" : "Devre dışı"}
                     </span>
+                  </td>
+                  <td>
+                    {d.status === "active" && (
+                      <button className="btn btn--warn btn--sm" onClick={() => disable(d)}>
+                        Devre Dışı
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -90,23 +90,41 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 
 Logları izlemek için: `docker compose -f docker-compose.prod.yml logs -f`
 
-## 5. Öğretmen PWA'sını dağıt (App Store/Play Store yok)
+## 4b. İlk kurulum: kampüsler, müdürler, onay akışı
+
+Backend ilk açılışta **5 kampüsü** (İkitelli OSB, İstanbul OSB, Esenyurt, Kıraç,
+Çorlu) ve `.env.prod`'daki **genel merkez (hq)** hesabını otomatik oluşturur.
+
+1. `https://panel.okulunuz.com`'a **genel merkez** hesabıyla gir.
+2. **Müdürler** sekmesinden her kampüse bir **kampüs müdürü** (e-posta + şifre)
+   oluştur. Müdür kendi kampüsünün personelini ve raporlarını görür.
+3. Personel telefonundan PWA'ya kaydolur (aşağıda **5. adım**); kaydı
+   **beklemede** gelir. İlgili **kampüs müdürü** panelin **Personel** sekmesinden
+   **Onayla**'ya basınca personel QR okutmaya başlar.
+4. Personel telefon değiştirirse müdür **Personel ▸ Cihazı Sıfırla** der;
+   personel yeni telefonda aynı numarayla yeniden kaydolur (geçmiş korunur).
+
+> Genel merkez panelde **kampüs filtresi** ile tek tek kampüsleri veya tümünü
+> görebilir, CSV'yi kampüs kırılımıyla indirebilir.
+
+## 5. Öğretmen/personel PWA'sını dağıt (App Store/Play Store yok)
 
 PWA zaten `https://app.okulunuz.com` adresinde yayında (4. adımda Caddy ile
-ayağa kalktı). App Store / Google Play süreci **gerekmez**. Öğretmenler:
+ayağa kalktı). App Store / Google Play süreci **gerekmez**. Personel:
 
 1. Telefon tarayıcısında `https://app.okulunuz.com` adresini açar.
 2. **Ana Ekrana Ekle** der:
    - **iPhone (Safari):** Paylaş ▸ "Ana Ekrana Ekle".
    - **Android (Chrome):** ⋮ menü ▸ "Uygulamayı yükle / Ana ekrana ekle".
 3. Uygulamayı ana ekrandan açar; tarayıcı barları olmadan (standalone) açılır.
-4. **Bir kez** e-posta + şifre ile giriş yapar. Cihaz, 1 yıllık oturuma
-   kilitlenir; sonraki günler uygulama doğrudan kameraya açılır (şifre sormaz).
+4. **Bir kez** ad-soyad, görev, branş, telefon ve kampüsünü girerek **kaydolur**
+   (şifre yok). Kampüs müdürü onayladıktan sonra cihaz 1 yıllık oturuma kilitlenir;
+   sonraki günler uygulama doğrudan kameraya açılır.
 
-> Güvenlik: Her hesap tek bir cihaza bağlıdır. Öğretmen başka bir telefondan
-> giriş yaparsa eski cihazın oturumu otomatik geçersiz olur (şifre paylaşımı
-> bu sayede engellenir). HTTPS zorunludur; kamera yalnızca güvenli bağlantıda
-> çalışır.
+> Güvenlik: Her hesap **telefon numarasıyla** tek bir cihaza bağlıdır. Başka bir
+> telefondan aynı numarayla kayıt, müdür "Cihazı Sıfırla" demeden **reddedilir**
+> (hesap paylaşımı bu sayede engellenir). HTTPS zorunludur; kamera yalnızca
+> güvenli bağlantıda çalışır.
 
 ## 6. Tablet kiosk modu
 

@@ -3,53 +3,63 @@ import { useAuth } from "../auth";
 import { api, downloadCsv } from "../api";
 
 function todayLocalISO() {
-  // YYYY-MM-DD in the browser's local time (good enough for the day filter).
   const d = new Date();
   const off = d.getTimezoneOffset();
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
 }
 
 const fmt = (iso) =>
-  new Date(iso).toLocaleString("tr-TR", {
-    dateStyle: "short",
-    timeStyle: "medium",
-  });
+  new Date(iso).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "medium" });
 
-export default function Dashboard() {
+export default function Dashboard({ isHq }) {
   const { token } = useAuth();
   const [summary, setSummary] = useState(null);
-  const [users, setUsers] = useState([]);
+  const [staff, setStaff] = useState([]);
+  const [campuses, setCampuses] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [campusId, setCampusId] = useState("");
   const [userId, setUserId] = useState("");
   const [day, setDay] = useState(todayLocalISO());
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
 
+  const campusFilter = isHq && campusId ? { campusId } : {};
+
   const loadSummary = useCallback(async () => {
     try {
-      setSummary(await api.todaySummary(token));
+      setSummary(await api.todaySummary(token, campusFilter));
     } catch (e) {
       setError(e.message);
     }
-  }, [token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, campusId]);
 
   const loadLogs = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
-      setLogs(await api.logs(token, { userId, day }));
+      setLogs(await api.logs(token, { userId, day, ...campusFilter }));
     } catch (e) {
       setError(e.message);
     } finally {
       setBusy(false);
     }
-  }, [token, userId, day]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, userId, day, campusId]);
 
   useEffect(() => {
-    api.listUsers(token).then(setUsers).catch((e) => setError(e.message));
+    if (isHq) api.campuses().then(setCampuses).catch(() => {});
+  }, [isHq]);
+
+  useEffect(() => {
+    api
+      .listStaff(token, { ...campusFilter })
+      .then(setStaff)
+      .catch((e) => setError(e.message));
     loadSummary();
-  }, [token, loadSummary]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, campusId]);
 
   useEffect(() => {
     loadLogs();
@@ -57,7 +67,7 @@ export default function Dashboard() {
 
   const onExport = async () => {
     try {
-      await downloadCsv(token, { userId, day });
+      await downloadCsv(token, { userId, day, ...campusFilter });
     } catch (e) {
       setError(e.message);
     }
@@ -77,6 +87,22 @@ export default function Dashboard() {
 
   return (
     <div className="stack">
+      {isHq && (
+        <section className="card">
+          <label className="field field--inline">
+            <span>Kampüs</span>
+            <select value={campusId} onChange={(e) => setCampusId(e.target.value)}>
+              <option value="">Tüm kampüsler</option>
+              {campuses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </section>
+      )}
+
       {/* KPI cards */}
       <section className="kpis">
         <div className="kpi">
@@ -87,12 +113,14 @@ export default function Dashboard() {
           <div className="kpi__value">{summary?.active_today ?? "—"}</div>
           <div className="kpi__label">Bugün hareketli personel</div>
         </div>
-        <div className="kpi kpi--action">
-          <button className="btn btn--warn" onClick={onRunAutoClose}>
-            Gece Kapanışını Çalıştır
-          </button>
-          <span className="muted small">İçeride kalanları kapatır</span>
-        </div>
+        {isHq && (
+          <div className="kpi kpi--action">
+            <button className="btn btn--warn" onClick={onRunAutoClose}>
+              Gece Kapanışını Çalıştır
+            </button>
+            <span className="muted small">Tüm kampüslerde içeride kalanları kapatır</span>
+          </div>
+        )}
       </section>
 
       {notice && <p className="notice">{notice}</p>}
@@ -105,6 +133,9 @@ export default function Dashboard() {
             {summary.currently_in.map((p) => (
               <li key={p.user_id}>
                 <strong>{p.full_name}</strong>
+                {isHq && p.campus_name && (
+                  <span className="badge badge--in">{p.campus_name}</span>
+                )}
                 <span className="muted small">{fmt(p.since)}'den beri</span>
               </li>
             ))}
@@ -121,7 +152,7 @@ export default function Dashboard() {
             <span>Personel</span>
             <select value={userId} onChange={(e) => setUserId(e.target.value)}>
               <option value="">Tümü</option>
-              {users.map((u) => (
+              {staff.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.full_name}
                 </option>
@@ -130,11 +161,7 @@ export default function Dashboard() {
           </label>
           <label className="field field--inline">
             <span>Gün</span>
-            <input
-              type="date"
-              value={day}
-              onChange={(e) => setDay(e.target.value)}
-            />
+            <input type="date" value={day} onChange={(e) => setDay(e.target.value)} />
           </label>
           <button className="btn btn--ghost" onClick={() => setDay("")}>
             Tüm günler
@@ -152,6 +179,7 @@ export default function Dashboard() {
             <thead>
               <tr>
                 <th>Personel</th>
+                {isHq && <th>Kampüs</th>}
                 <th>Tür</th>
                 <th>Durum</th>
                 <th>Zaman</th>
@@ -160,13 +188,13 @@ export default function Dashboard() {
             <tbody>
               {busy ? (
                 <tr>
-                  <td colSpan={4} className="muted">
+                  <td colSpan={isHq ? 5 : 4} className="muted">
                     Yükleniyor…
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="muted">
+                  <td colSpan={isHq ? 5 : 4} className="muted">
                     Kayıt bulunamadı.
                   </td>
                 </tr>
@@ -174,11 +202,10 @@ export default function Dashboard() {
                 logs.map((l) => (
                   <tr key={l.id}>
                     <td>{l.user_full_name}</td>
+                    {isHq && <td className="muted small">{l.campus_name || "—"}</td>}
                     <td>
                       <span
-                        className={
-                          l.type === "IN" ? "badge badge--in" : "badge badge--out"
-                        }
+                        className={l.type === "IN" ? "badge badge--in" : "badge badge--out"}
                       >
                         {l.type === "IN" ? "GİRİŞ" : "ÇIKIŞ"}
                       </span>

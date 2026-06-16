@@ -47,8 +47,8 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const data = await api.login(email.trim().toLowerCase(), password, fingerprint);
-    if (data.user.role !== "admin") {
-      throw new Error("Bu panele yalnızca yöneticiler giriş yapabilir.");
+    if (!["campus_director", "hq"].includes(data.user.role)) {
+      throw new Error("Bu panele yalnızca müdür ve genel merkez giriş yapabilir.");
     }
     localStorage.setItem(REFRESH_KEY, data.refresh_token);
     setToken(data.access_token);

@@ -175,6 +175,21 @@ select:focus {
   color: var(--text);
   border: 1px solid var(--line);
 }
+.btn--sm {
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  border-radius: 8px;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
 .tab {
   background: transparent;
   color: var(--muted);

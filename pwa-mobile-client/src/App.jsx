@@ -1,11 +1,12 @@
 import { useAuth } from "./auth";
-import Login from "./screens/Login";
+import Register from "./screens/Register";
+import Pending from "./screens/Pending";
 import Scanner from "./screens/Scanner";
 
 export default function App() {
-  const { status } = useAuth();
+  const { phase } = useAuth();
 
-  if (status === "loading") {
+  if (phase === "loading") {
     return (
       <div className="screen center">
         <div className="spinner" />
@@ -14,6 +15,8 @@ export default function App() {
     );
   }
 
-  // Authenticated teachers go straight to the camera; no login screen.
-  return status === "authed" ? <Scanner /> : <Login />;
+  // Approved staff go straight to the camera; pending wait for director approval.
+  if (phase === "authed") return <Scanner />;
+  if (phase === "pending") return <Pending />;
+  return <Register />;
 }

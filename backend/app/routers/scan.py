@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..deps import get_current_user
+from ..deps import get_current_active_staff
 from ..models import AttendanceType, User, UsedQrToken
 from ..schemas import ScanRequest, ScanResponse
 from ..security import decode_qr_token
@@ -32,7 +32,7 @@ _MESSAGES = {
 @router.post("/scan", response_model=ScanResponse)
 async def scan(
     payload: ScanRequest,
-    current: User = Depends(get_current_user),
+    current: User = Depends(get_current_active_staff),
     db: AsyncSession = Depends(get_db),
 ):
     # --- 1. Validate the QR token (signature + expiry on the SERVER clock) ---
