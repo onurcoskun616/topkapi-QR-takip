@@ -25,7 +25,7 @@ services:
       AUTH_SECRET: dev-auth-secret-change-in-production
       QR_SECRET: dev-qr-secret-change-in-production
       QR_TOKEN_TTL_SECONDS: "15"
-      CORS_ORIGINS: "http://localhost:5173,http://localhost:19006"
+      CORS_ORIGINS: "http://localhost:5173,http://localhost:5174,http://localhost:19006"
       ATTENDANCE_TIMEZONE: "Europe/Istanbul"
       BOOTSTRAP_ADMIN_EMAIL: "admin@topkapi.k12.tr"
       BOOTSTRAP_ADMIN_PASSWORD: "ChangeThisAdminPassword123!"

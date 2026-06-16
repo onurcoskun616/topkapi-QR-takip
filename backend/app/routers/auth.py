@@ -16,15 +16,21 @@ from ..security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+# Pre-computed once at import so the login path performs an equal-cost bcrypt
+# check even for non-existent emails (defends against timing-based enumeration).
+_DUMMY_PASSWORD_HASH = hash_password("topkapi-invalid-login-placeholder")
+
 
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == payload.email.lower()))
     user = result.scalar_one_or_none()
 
-    # Constant-ish behaviour: always run verify to reduce user-enumeration via
-    # timing, then return one generic error for both missing user / bad password.
-    valid = bool(user) and verify_password(payload.password, user.password_hash)
+    # Always run a bcrypt verification — against a dummy hash when the email is
+    # unknown — so response time does not reveal whether an account exists.
+    valid = verify_password(
+        payload.password, user.password_hash if user else _DUMMY_PASSWORD_HASH
+    )
     if not user or not valid or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

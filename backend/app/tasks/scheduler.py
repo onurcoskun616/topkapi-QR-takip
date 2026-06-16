@@ -34,6 +34,10 @@ async def auto_close_open_attendances() -> int:
     """
     now_utc = datetime.now(timezone.utc)
     start_utc, end_utc = local_day_bounds_utc(now_utc)
+    # Stamp the closure at the moment it is requested, never in the future.
+    # For the 23:59 cron this is ~day-end; for a manual mid-day reset it is
+    # "now", so it cannot become a future max(scan_time) that breaks toggling.
+    close_time = min(now_utc, end_utc)
 
     async with AsyncSessionLocal() as db:
         # Latest scan_time per user within today.
@@ -64,8 +68,7 @@ async def auto_close_open_attendances() -> int:
             db.add(
                 AttendanceLog(
                     user_id=last_log.user_id,
-                    # Close at end of the local day.
-                    scan_time=end_utc,
+                    scan_time=close_time,
                     type=AttendanceType.OUT,
                     status=AttendanceStatus.auto_closed_by_system,
                 )

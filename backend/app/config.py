@@ -27,7 +27,10 @@ class Settings(BaseSettings):
     qr_token_ttl_seconds: int = 15
 
     # CORS
-    cors_origins: str = "http://localhost:5173,http://localhost:19006"
+    # Kiosk (5173), admin panel (5174) and Expo (19006) dev origins.
+    cors_origins: str = (
+        "http://localhost:5173,http://localhost:5174,http://localhost:19006"
+    )
 
     # Day-boundary timezone for attendance toggling (storage stays UTC).
     attendance_timezone: str = "Europe/Istanbul"
