@@ -1,13 +1,15 @@
 """ORM models for the attendance system."""
 import enum
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 
 from sqlalchemy import (
+    Date,
     DateTime,
     Enum,
     ForeignKey,
     Index,
     String,
+    Time,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -64,6 +66,19 @@ class AttendanceStatus(str, enum.Enum):
     auto_closed_by_system = "auto_closed_by_system"
 
 
+class AttendanceSource(str, enum.Enum):
+    """Where an attendance row came from — kept separate so reports can never
+    confuse a real scan with a manager's manual gap-fill entry."""
+
+    qr_scan = "qr_scan"
+    director_manual = "director_manual"
+
+
+class LeaveStatus(str, enum.Enum):
+    active = "active"        # blocks scanning for the covered date range
+    cancelled = "cancelled"  # corrected/withdrawn — no longer blocks anything
+
+
 class Campus(Base):
     """A physical campus (İkitelli OSB, İstanbul OSB, Esenyurt, Kıraç, Çorlu)."""
 
@@ -72,6 +87,12 @@ class Campus(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     slug: Mapped[str] = mapped_column(String(60), unique=True, index=True, nullable=False)
+
+    # Work-hours / shift schedule — only head office (hq) may set these
+    # (enforced in the router, not here); directors have no write access.
+    shift_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    shift_end: Mapped[time | None] = mapped_column(Time, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -120,7 +141,9 @@ class User(Base):
 
     campus: Mapped["Campus | None"] = relationship(back_populates="users")
     logs: Mapped[list["AttendanceLog"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
+        back_populates="user",
+        foreign_keys="AttendanceLog.user_id",
+        cascade="all, delete-orphan",
     )
 
 
@@ -143,10 +166,64 @@ class AttendanceLog(Base):
         nullable=False,
     )
 
-    user: Mapped["User"] = relationship(back_populates="logs")
+    # Provenance: a real kiosk QR scan vs. a director's manual gap-fill entry
+    # (phone died, forgot to scan). Manual rows are additive-only — there is no
+    # endpoint that edits/deletes a qr_scan row, so this column also doubles as
+    # the audit trail that proves a director never touched real scan data.
+    source: Mapped[AttendanceSource] = mapped_column(
+        Enum(AttendanceSource, name="attendance_source"),
+        default=AttendanceSource.qr_scan,
+        nullable=False,
+    )
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    recorded_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    user: Mapped["User"] = relationship(back_populates="logs", foreign_keys="AttendanceLog.user_id")
+    recorded_by: Mapped["User | None"] = relationship(foreign_keys="AttendanceLog.recorded_by_id")
 
     __table_args__ = (
         Index("ix_attendance_user_time", "user_id", "scan_time"),
+    )
+
+
+class LeaveRecord(Base):
+    """A leave/absence period (sağlık raporu, ücretli izin, …) for one staff
+    member. While ``status`` is ``active`` and today's local date falls inside
+    [start_date, end_date], the staff member cannot scan — ``/api/scan`` checks
+    this and tells them to see their campus director.
+
+    ``leave_type`` is free text on purpose: the requested list (medical report,
+    paid/unpaid leave, marriage/paternity/maternity leave, …) is explicitly
+    open-ended ("ve benzeri"), so the API never hard-codes an exhaustive enum.
+    """
+
+    __tablename__ = "leave_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    leave_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[LeaveStatus] = mapped_column(
+        Enum(LeaveStatus, name="leave_status"), default=LeaveStatus.active, nullable=False
+    )
+    created_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(foreign_keys="LeaveRecord.user_id")
+    created_by: Mapped["User | None"] = relationship(foreign_keys="LeaveRecord.created_by_id")
+
+    __table_args__ = (
+        Index("ix_leave_user_dates", "user_id", "start_date", "end_date"),
     )
 
 

@@ -15,6 +15,7 @@ from ..database import get_db
 from ..deps import get_current_hq, get_current_manager
 from ..models import Campus, Session, User, UserRole, UserStatus
 from ..schemas import DirectorCreate, StaffUpdate, UserResponse
+from ..scoping import load_scoped_staff
 from ..security import hash_password
 from ..serializers import to_user_response
 
@@ -44,19 +45,6 @@ async def _users_with_device(db: AsyncSession, user_ids: list[int]) -> set[int]:
         .distinct()
     )
     return {uid for (uid,) in rows.all()}
-
-
-async def _load_scoped_staff(db: AsyncSession, manager: User, staff_id: int) -> User:
-    """Fetch a staff user, enforcing that the manager is allowed to touch it."""
-    staff = await db.get(User, staff_id)
-    if staff is None or staff.role != UserRole.staff:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Personel bulunamadı.")
-    if manager.role == UserRole.campus_director and staff.campus_id != manager.campus_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Bu personel sizin kampüsünüze ait değil.",
-        )
-    return staff
 
 
 # --------------------------------------------------------------------------- #
@@ -97,7 +85,7 @@ async def approve_staff(
     db: AsyncSession = Depends(get_db),
 ):
     """Approve a pending registration so the staff member may start scanning."""
-    staff = await _load_scoped_staff(db, manager, staff_id)
+    staff = await load_scoped_staff(db, manager, staff_id)
     if staff.status == UserStatus.disabled:
         staff.status = UserStatus.active
     elif staff.status == UserStatus.pending:
@@ -115,7 +103,7 @@ async def disable_staff(
     db: AsyncSession = Depends(get_db),
 ):
     """Deactivate an account and drop its device session (full lock-out)."""
-    staff = await _load_scoped_staff(db, manager, staff_id)
+    staff = await load_scoped_staff(db, manager, staff_id)
     staff.status = UserStatus.disabled
     await db.execute(delete(Session).where(Session.user_id == staff.id))
     await db.commit()
@@ -135,7 +123,7 @@ async def reset_device(
     binding is removed. The staff member then re-opens the PWA on the new phone
     and re-registers with the *same* phone number to bind it.
     """
-    staff = await _load_scoped_staff(db, manager, staff_id)
+    staff = await load_scoped_staff(db, manager, staff_id)
     await db.execute(delete(Session).where(Session.user_id == staff.id))
     await db.commit()
     names = await _campus_names(db)
@@ -150,7 +138,7 @@ async def update_staff(
     db: AsyncSession = Depends(get_db),
 ):
     """Correct a staff profile (name / görev / branş / campus)."""
-    staff = await _load_scoped_staff(db, manager, staff_id)
+    staff = await load_scoped_staff(db, manager, staff_id)
 
     if payload.full_name is not None:
         staff.full_name = payload.full_name.strip()

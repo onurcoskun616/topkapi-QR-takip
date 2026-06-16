@@ -13,3 +13,4 @@ apscheduler==3.10.4
 # install but expose no module, breaking "import apscheduler". 5.2 is stable.
 tzlocal==5.2
 email-validator==2.1.1
+openpyxl==3.1.5

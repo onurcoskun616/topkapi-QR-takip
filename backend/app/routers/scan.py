@@ -8,18 +8,20 @@ Flow:
   5. Toggle: decide IN/OUT from the user's last log *today* and persist it.
 """
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from jose import ExpiredSignatureError, JWTError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import settings
 from ..database import get_db
 from ..deps import get_current_active_staff
 from ..models import AttendanceType, User, UsedQrToken
 from ..schemas import ScanRequest, ScanResponse
 from ..security import decode_qr_token
-from ..services import record_scan
+from ..services import get_active_leave_for_day, record_scan
 
 router = APIRouter(prefix="/api", tags=["scan"])
 
@@ -35,6 +37,20 @@ async def scan(
     current: User = Depends(get_current_active_staff),
     db: AsyncSession = Depends(get_db),
 ):
+    # --- 0. Blocked while an active leave/absence record covers today -------
+    today_local = datetime.now(timezone.utc).astimezone(
+        ZoneInfo(settings.attendance_timezone)
+    ).date()
+    leave = await get_active_leave_for_day(db, current.id, today_local)
+    if leave is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Bugün için '{leave.leave_type}' durumu kayıtlı. "
+                "Bir hata olduğunu düşünüyorsanız kampüs müdürünüze başvurun."
+            ),
+        )
+
     # --- 1. Validate the QR token (signature + expiry on the SERVER clock) ---
     try:
         qr = decode_qr_token(payload.qr_token)
