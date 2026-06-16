@@ -3,7 +3,10 @@ import { useAuth } from "./auth";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
 import Staff from "./components/Staff";
+import Leaves from "./components/Leaves";
+import Reports from "./components/Reports";
 import Directors from "./components/Directors";
+import Campuses from "./components/Campuses";
 
 export default function App() {
   const { isAuthed, loading, user, logout } = useAuth();
@@ -39,12 +42,32 @@ export default function App() {
           >
             Personel
           </button>
+          <button
+            className={tab === "leaves" ? "tab tab--active" : "tab"}
+            onClick={() => setTab("leaves")}
+          >
+            İzin / Devamsızlık
+          </button>
+          <button
+            className={tab === "reports" ? "tab tab--active" : "tab"}
+            onClick={() => setTab("reports")}
+          >
+            Raporlar
+          </button>
           {isHq && (
             <button
               className={tab === "directors" ? "tab tab--active" : "tab"}
               onClick={() => setTab("directors")}
             >
               Müdürler
+            </button>
+          )}
+          {isHq && (
+            <button
+              className={tab === "campuses" ? "tab tab--active" : "tab"}
+              onClick={() => setTab("campuses")}
+            >
+              Kampüsler
             </button>
           )}
         </nav>
@@ -60,7 +83,10 @@ export default function App() {
       <main className="content">
         {tab === "dashboard" && <Dashboard isHq={isHq} />}
         {tab === "staff" && <Staff isHq={isHq} />}
+        {tab === "leaves" && <Leaves isHq={isHq} />}
+        {tab === "reports" && <Reports isHq={isHq} />}
         {tab === "directors" && isHq && <Directors />}
+        {tab === "campuses" && isHq && <Campuses />}
       </main>
     </div>
   );

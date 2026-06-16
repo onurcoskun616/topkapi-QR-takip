@@ -8,6 +8,13 @@ const STATUS_LABEL = {
   disabled: "Devre dışı",
 };
 
+function nowLocal() {
+  const d = new Date();
+  const off = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - off * 60000).toISOString();
+  return { date: local.slice(0, 10), time: local.slice(11, 16) };
+}
+
 export default function Staff({ isHq }) {
   const { token } = useAuth();
   const [staff, setStaff] = useState([]);
@@ -16,6 +23,11 @@ export default function Staff({ isHq }) {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busyId, setBusyId] = useState(null);
+
+  const [manualForId, setManualForId] = useState(null);
+  const [manualForm, setManualForm] = useState({ type: "IN", date: "", time: "", note: "" });
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualError, setManualError] = useState(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -67,79 +79,182 @@ export default function Staff({ isHq }) {
     act(u.id, () => api.disableStaff(token, u.id), `${u.full_name} devre dışı bırakıldı.`);
   };
 
+  const openManual = (u) => {
+    setManualForId(u.id);
+    setManualError(null);
+    setManualForm({ type: "IN", ...nowLocal(), note: "" });
+  };
+
+  const closeManual = () => {
+    setManualForId(null);
+    setManualError(null);
+  };
+
+  const submitManual = async (e, u) => {
+    e.preventDefault();
+    setManualBusy(true);
+    setManualError(null);
+    try {
+      await api.createManualLog(token, {
+        user_id: u.id,
+        type: manualForm.type,
+        date: manualForm.date,
+        time: `${manualForm.time}:00`,
+        note: manualForm.note || undefined,
+      });
+      setNotice(`${u.full_name} için manuel ${manualForm.type === "IN" ? "giriş" : "çıkış"} kaydı eklendi.`);
+      closeManual();
+      await load();
+    } catch (err) {
+      setManualError(err.message);
+    } finally {
+      setManualBusy(false);
+    }
+  };
+
   const pending = staff.filter((u) => u.status === "pending");
   const others = staff.filter((u) => u.status !== "pending");
 
-  const Row = ({ u }) => (
-    <tr>
-      <td>
-        <strong>{u.full_name}</strong>
-        <div className="muted small">
-          {u.job_title} · {u.branch}
-        </div>
-      </td>
-      <td className="muted small">{u.phone || "—"}</td>
-      {isHq && <td className="muted small">{u.campus_name || "—"}</td>}
-      <td>
-        <span
-          className={
-            u.status === "active"
-              ? "badge badge--in"
-              : u.status === "pending"
-                ? "badge badge--auto"
-                : "badge badge--out"
-          }
-        >
-          {STATUS_LABEL[u.status]}
-        </span>
-      </td>
-      <td>
-        {u.has_device ? (
-          <span className="badge badge--in">Cihaz bağlı</span>
-        ) : (
-          <span className="muted small">cihaz yok</span>
-        )}
-      </td>
-      <td className="actions">
-        {u.status === "pending" && (
-          <button
-            className="btn btn--primary btn--sm"
-            disabled={busyId === u.id}
-            onClick={() => approve(u)}
-          >
-            Onayla
-          </button>
-        )}
-        {u.status === "active" && (
-          <>
-            <button
-              className="btn btn--ghost btn--sm"
-              disabled={busyId === u.id || !u.has_device}
-              onClick={() => reset(u)}
-              title="Telefon değişikliği için cihaz kaydını sıfırlar"
+  const ManualRow = ({ u }) => (
+    <tr className="manual-row">
+      <td colSpan={isHq ? 6 : 5}>
+        <form className="manual-form" onSubmit={(e) => submitManual(e, u)}>
+          <span className="manual-form__title">
+            <strong>{u.full_name}</strong> için manuel kayıt — telefon arızalı / taranmayı unuttu
+          </span>
+          <label className="field field--inline">
+            <span>Tür</span>
+            <select
+              value={manualForm.type}
+              onChange={(e) => setManualForm({ ...manualForm, type: e.target.value })}
             >
-              Cihazı Sıfırla
+              <option value="IN">Giriş</option>
+              <option value="OUT">Çıkış</option>
+            </select>
+          </label>
+          <label className="field field--inline">
+            <span>Tarih</span>
+            <input
+              type="date"
+              required
+              value={manualForm.date}
+              onChange={(e) => setManualForm({ ...manualForm, date: e.target.value })}
+            />
+          </label>
+          <label className="field field--inline">
+            <span>Saat</span>
+            <input
+              type="time"
+              required
+              value={manualForm.time}
+              onChange={(e) => setManualForm({ ...manualForm, time: e.target.value })}
+            />
+          </label>
+          <label className="field field--inline manual-form__note">
+            <span>Not (opsiyonel)</span>
+            <input
+              type="text"
+              maxLength={255}
+              value={manualForm.note}
+              onChange={(e) => setManualForm({ ...manualForm, note: e.target.value })}
+              placeholder="Telefon arızalı"
+            />
+          </label>
+          <div className="actions">
+            <button className="btn btn--primary btn--sm" disabled={manualBusy} type="submit">
+              {manualBusy ? "Kaydediliyor…" : "Kaydet"}
             </button>
-            <button
-              className="btn btn--warn btn--sm"
-              disabled={busyId === u.id}
-              onClick={() => disable(u)}
-            >
-              Devre Dışı
+            <button className="btn btn--ghost btn--sm" type="button" onClick={closeManual}>
+              Vazgeç
             </button>
-          </>
-        )}
-        {u.status === "disabled" && (
-          <button
-            className="btn btn--primary btn--sm"
-            disabled={busyId === u.id}
-            onClick={() => approve(u)}
-          >
-            Yeniden Aktifleştir
-          </button>
-        )}
+          </div>
+          {manualError && <p className="error">{manualError}</p>}
+        </form>
       </td>
     </tr>
+  );
+
+  const Row = ({ u }) => (
+    <>
+      <tr>
+        <td>
+          <strong>{u.full_name}</strong>
+          <div className="muted small">
+            {u.job_title} · {u.branch}
+          </div>
+        </td>
+        <td className="muted small">{u.phone || "—"}</td>
+        {isHq && <td className="muted small">{u.campus_name || "—"}</td>}
+        <td>
+          <span
+            className={
+              u.status === "active"
+                ? "badge badge--in"
+                : u.status === "pending"
+                  ? "badge badge--auto"
+                  : "badge badge--out"
+            }
+          >
+            {STATUS_LABEL[u.status]}
+          </span>
+        </td>
+        <td>
+          {u.has_device ? (
+            <span className="badge badge--in">Cihaz bağlı</span>
+          ) : (
+            <span className="muted small">cihaz yok</span>
+          )}
+        </td>
+        <td className="actions">
+          {u.status === "pending" && (
+            <button
+              className="btn btn--primary btn--sm"
+              disabled={busyId === u.id}
+              onClick={() => approve(u)}
+            >
+              Onayla
+            </button>
+          )}
+          {u.status === "active" && (
+            <>
+              <button
+                className="btn btn--ghost btn--sm"
+                disabled={busyId === u.id}
+                onClick={() => (manualForId === u.id ? closeManual() : openManual(u))}
+                title="Telefon arızalı/taranmadı durumunda manuel giriş-çıkış ekler"
+              >
+                Manuel Kayıt
+              </button>
+              <button
+                className="btn btn--ghost btn--sm"
+                disabled={busyId === u.id || !u.has_device}
+                onClick={() => reset(u)}
+                title="Telefon değişikliği için cihaz kaydını sıfırlar"
+              >
+                Cihazı Sıfırla
+              </button>
+              <button
+                className="btn btn--warn btn--sm"
+                disabled={busyId === u.id}
+                onClick={() => disable(u)}
+              >
+                Devre Dışı
+              </button>
+            </>
+          )}
+          {u.status === "disabled" && (
+            <button
+              className="btn btn--primary btn--sm"
+              disabled={busyId === u.id}
+              onClick={() => approve(u)}
+            >
+              Yeniden Aktifleştir
+            </button>
+          )}
+        </td>
+      </tr>
+      {manualForId === u.id && <ManualRow u={u} />}
+    </>
   );
 
   const cols = isHq ? 6 : 5;
