@@ -14,3 +14,6 @@ apscheduler==3.10.4
 tzlocal==5.2
 email-validator==2.1.1
 openpyxl==3.1.5
+# Test-only: backend/tests/conftest.py spins up a real app instance against a
+# throwaway SQLite DB per test (production uses asyncpg/PostgreSQL).
+aiosqlite==0.22.1
