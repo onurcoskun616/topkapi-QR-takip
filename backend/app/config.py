@@ -16,20 +16,24 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://topkapi:topkapi@localhost:5432/topkapi_qr"
 
-    # JWT — deliberately two independent secrets so a leaked QR key can never be
-    # used to mint a valid login session and vice-versa.
+    # JWT — three independent secrets so a leak in one domain cannot mint
+    # tokens in another (QR kiosk / short access / long refresh).
     auth_secret: str = "change-me-auth"
     qr_secret: str = "change-me-qr"
+    refresh_secret: str = "change-me-refresh"
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 720
+    # Short-lived access token (the PWA silently refreshes it each morning).
+    access_token_expire_minutes: int = 15
+    # Long-lived refresh token bound to a single device (the "1 year" rule).
+    refresh_token_expire_days: int = 365
 
     # QR business rule: token is valid for this many seconds (the "15s rule").
     qr_token_ttl_seconds: int = 15
 
     # CORS
-    # Kiosk (5173), admin panel (5174) and Expo (19006) dev origins.
+    # Kiosk (5173), admin panel (5174) and teacher PWA (5175) dev origins.
     cors_origins: str = (
-        "http://localhost:5173,http://localhost:5174,http://localhost:19006"
+        "http://localhost:5173,http://localhost:5174,http://localhost:5175"
     )
 
     # Day-boundary timezone for attendance toggling (storage stays UTC).

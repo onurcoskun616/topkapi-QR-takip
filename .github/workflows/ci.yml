@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [kiosk-app, admin-app]
+        app: [kiosk-app, admin-app, pwa-mobile-client]
     defaults:
       run:
         working-directory: ${{ matrix.app }}

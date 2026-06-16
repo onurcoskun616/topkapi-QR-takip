@@ -8,11 +8,13 @@ Caddy** (otomatik HTTPS). Tek makinede backend, PostgreSQL, kiosk ve admin
 İnternet ──HTTPS──> Caddy (otomatik Let's Encrypt)
                        ├── api.okulunuz.com    → backend (FastAPI)
                        ├── kiosk.okulunuz.com  → kiosk SPA (nginx)
-                       └── panel.okulunuz.com  → admin SPA (nginx)
+                       ├── panel.okulunuz.com  → admin SPA (nginx)
+                       └── app.okulunuz.com    → öğretmen PWA (nginx)
                      PostgreSQL (kalıcı volume) — sadece iç ağ
 ```
 
-Mobil uygulama (Expo) ayrı dağıtılır (aşağıda **5. adım**).
+Öğretmen uygulaması artık bir PWA'dır (App Store/Play Store **yok**);
+telefonda tarayıcıdan "Ana Ekrana Ekle" ile kurulur (aşağıda **5. adım**).
 
 ---
 
@@ -34,6 +36,7 @@ Mobil uygulama (Expo) ayrı dağıtılır (aşağıda **5. adım**).
 | `api.okulunuz.com` | `<SUNUCU_IP>` |
 | `kiosk.okulunuz.com` | `<SUNUCU_IP>` |
 | `panel.okulunuz.com` | `<SUNUCU_IP>` |
+| `app.okulunuz.com` | `<SUNUCU_IP>` |
 
 > HTTPS zorunlu: Android cihazlar `http://` (cleartext) isteklerini engeller;
 > kamera ve API çağrıları yalnızca HTTPS ile sorunsuz çalışır.
@@ -78,29 +81,32 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 ```
 
 - Backend ilk açılışta tabloları oluşturur ve bootstrap admin'i ekler.
-- Caddy birkaç saniye içinde üç alan adı için sertifika alır.
+- Caddy birkaç saniye içinde dört alan adı için sertifika alır.
 - Kontrol:
   - `https://api.okulunuz.com/health` → `{"status":"ok", ...}`
   - `https://panel.okulunuz.com` → yönetim paneli (admin ile giriş yap)
   - `https://kiosk.okulunuz.com` → dönen QR ekranı
+  - `https://app.okulunuz.com` → öğretmen PWA (giriş ekranı)
 
 Logları izlemek için: `docker compose -f docker-compose.prod.yml logs -f`
 
-## 5. Mobil uygulama (Expo) yayını
+## 5. Öğretmen PWA'sını dağıt (App Store/Play Store yok)
 
-API adresini ayarla ve EAS ile derle:
+PWA zaten `https://app.okulunuz.com` adresinde yayında (4. adımda Caddy ile
+ayağa kalktı). App Store / Google Play süreci **gerekmez**. Öğretmenler:
 
-```bash
-cd mobile-app
-# app.json -> expo.extra.apiBaseUrl = "https://api.okulunuz.com"
-npm install -g eas-cli
-eas login
-eas build -p android         # APK/AAB üretir
-# (iOS için: eas build -p ios  — Apple geliştirici hesabı gerekir)
-```
+1. Telefon tarayıcısında `https://app.okulunuz.com` adresini açar.
+2. **Ana Ekrana Ekle** der:
+   - **iPhone (Safari):** Paylaş ▸ "Ana Ekrana Ekle".
+   - **Android (Chrome):** ⋮ menü ▸ "Uygulamayı yükle / Ana ekrana ekle".
+3. Uygulamayı ana ekrandan açar; tarayıcı barları olmadan (standalone) açılır.
+4. **Bir kez** e-posta + şifre ile giriş yapar. Cihaz, 1 yıllık oturuma
+   kilitlenir; sonraki günler uygulama doğrudan kameraya açılır (şifre sormaz).
 
-- Birkaç okul cihazı için: üretilen **APK**'yı doğrudan cihazlara kur.
-- Geniş dağıtım için: Google Play / App Store.
+> Güvenlik: Her hesap tek bir cihaza bağlıdır. Öğretmen başka bir telefondan
+> giriş yaparsa eski cihazın oturumu otomatik geçersiz olur (şifre paylaşımı
+> bu sayede engellenir). HTTPS zorunludur; kamera yalnızca güvenli bağlantıda
+> çalışır.
 
 ## 6. Tablet kiosk modu
 
@@ -141,7 +147,9 @@ cat backup_2026-06-16.sql | docker compose -f docker-compose.prod.yml \
 - [ ] Sunucuda NTP aktif (`timedatectl`)
 - [ ] Günlük PostgreSQL yedeği kuruldu
 - [ ] Gece 23:59 otomatik kapanış ilk gün loglardan doğrulandı
-- [ ] Mobil uygulamadaki `apiBaseUrl` = `https://api.okulunuz.com`
+- [ ] `AUTH_SECRET`, `REFRESH_SECRET`, `QR_SECRET` üçü de ayrı ve rastgele
+- [ ] Öğretmen PWA'sı `https://app.okulunuz.com`'da açılıyor ve "Ana Ekrana
+      Ekle" çalışıyor; tek-cihaz kilidi test edildi
 
 ---
 

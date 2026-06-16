@@ -19,8 +19,11 @@ uvicorn app.main:app --reload --port 8000
 | Değişken                  | Açıklama                                       |
 | ------------------------- | ---------------------------------------------- |
 | `DATABASE_URL`            | `postgresql+asyncpg://...`                     |
-| `AUTH_SECRET`             | Login JWT imza anahtarı                        |
-| `QR_SECRET`               | QR token imza anahtarı (AUTH'tan farklı olmalı)|
+| `AUTH_SECRET`             | Access token imza anahtarı                     |
+| `REFRESH_SECRET`          | Refresh token imza anahtarı (AUTH'tan farklı)  |
+| `QR_SECRET`               | QR token imza anahtarı (diğerlerinden farklı)  |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token ömrü (varsayılan 15)          |
+| `REFRESH_TOKEN_EXPIRE_DAYS`   | Refresh token ömrü (varsayılan 365)        |
 | `QR_TOKEN_TTL_SECONDS`    | QR geçerlilik süresi (varsayılan 15)           |
 | `ATTENDANCE_TIMEZONE`     | Gün sınırı için saat dilimi (depolama UTC)     |
 | `BOOTSTRAP_ADMIN_*`       | İlk açılışta oluşturulacak admin               |
@@ -29,7 +32,9 @@ uvicorn app.main:app --reload --port 8000
 
 | Method | Yol                      | Yetki  | Açıklama                              |
 | ------ | ------------------------ | ------ | ------------------------------------- |
-| POST   | `/api/auth/login`        | —      | E-posta + şifre → JWT                 |
+| POST   | `/api/auth/login`        | —      | E-posta + şifre + cihaz imzası → access + refresh |
+| POST   | `/api/auth/refresh`      | —      | Refresh token + cihaz imzası → yeni access (sessiz) |
+| POST   | `/api/auth/logout`       | user   | Mevcut oturumu (cihazı) geçersiz kıl  |
 | GET    | `/api/auth/me`           | user   | Mevcut kullanıcı                      |
 | GET    | `/api/auth/users`        | admin  | Tüm kullanıcıları listele             |
 | POST   | `/api/auth/users`        | admin  | Yeni öğretmen/admin oluştur           |

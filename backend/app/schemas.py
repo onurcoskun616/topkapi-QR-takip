@@ -12,11 +12,27 @@ from .models import AttendanceStatus, AttendanceType, UserRole
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1)
+    # Browser/hardware-derived fingerprint that binds the session to one device.
+    device_fingerprint: str = Field(min_length=8, max_length=256)
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=1)
+    device_fingerprint: str = Field(min_length=8, max_length=256)
 
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
+    access_expires_in: int  # seconds until the access token expires
+    user: "UserResponse"
+
+
+class AccessTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    access_expires_in: int
     user: "UserResponse"
 
 

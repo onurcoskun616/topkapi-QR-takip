@@ -1,0 +1,22 @@
+{
+  "name": "topkapi-pwa-mobile-client",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Teacher PWA: install to home screen, opens straight to the QR camera.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host"
+  },
+  "dependencies": {
+    "html5-qrcode": "^2.3.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.3.1",
+    "vite-plugin-pwa": "^0.20.5"
+  }
+}

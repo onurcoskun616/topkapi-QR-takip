@@ -21,3 +21,9 @@
 	encode gzip
 	reverse_proxy admin:80
 }
+
+# Teacher PWA — installable web app served by its nginx container.
+{$APP_DOMAIN} {
+	encode gzip
+	reverse_proxy pwa:80
+}

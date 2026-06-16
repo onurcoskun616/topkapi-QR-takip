@@ -1,13 +1,16 @@
 """Password hashing and JWT helpers.
 
-Two separate token domains:
-  * **Auth tokens** — long-lived teacher/admin login sessions (AUTH_SECRET).
-  * **QR tokens**   — short-lived kiosk codes, 15s TTL (QR_SECRET).
+Three separate token domains, each with its own secret:
+  * **Access tokens**  — short-lived (≈15 min), carry the session id (AUTH_SECRET).
+  * **Refresh tokens** — long-lived (≈365 days), device-bound (REFRESH_SECRET).
+  * **QR tokens**      — short-lived kiosk codes, 15s TTL (QR_SECRET).
 """
+import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
+
 from passlib.context import CryptContext
 
 from .config import settings
@@ -26,14 +29,20 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
+def sha256_hex(value: str) -> str:
+    """Stable hash used for device fingerprints and refresh-token storage."""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 # --------------------------------------------------------------------------- #
-# Auth (login) tokens
+# Access tokens (short-lived, carry the session id `sid`)
 # --------------------------------------------------------------------------- #
-def create_access_token(*, user_id: int, role: str) -> str:
+def create_access_token(*, user_id: int, role: str, session_id: int) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
         "role": role,
+        "sid": session_id,
         "type": "access",
         "iat": int(now.timestamp()),
         "exp": int(
@@ -49,6 +58,36 @@ def decode_access_token(token: str) -> dict:
         token, settings.auth_secret, algorithms=[settings.jwt_algorithm]
     )
     if payload.get("type") != "access":
+        raise JWTError("Invalid token type")
+    return payload
+
+
+# --------------------------------------------------------------------------- #
+# Refresh tokens (long-lived, one per device session)
+# --------------------------------------------------------------------------- #
+def create_refresh_token(*, user_id: int, session_id: int) -> dict:
+    """Mint a refresh token. Returns the raw token plus its timing metadata."""
+    now = datetime.now(timezone.utc)
+    exp = now + timedelta(days=settings.refresh_token_expire_days)
+    payload = {
+        "sub": str(user_id),
+        "sid": session_id,
+        "jti": uuid.uuid4().hex,
+        "type": "refresh",
+        "iat": int(now.timestamp()),
+        "exp": int(exp.timestamp()),
+    }
+    token = jwt.encode(
+        payload, settings.refresh_secret, algorithm=settings.jwt_algorithm
+    )
+    return {"token": token, "expires_at": exp}
+
+
+def decode_refresh_token(token: str) -> dict:
+    payload = jwt.decode(
+        token, settings.refresh_secret, algorithms=[settings.jwt_algorithm]
+    )
+    if payload.get("type") != "refresh":
         raise JWTError("Invalid token type")
     return payload
 

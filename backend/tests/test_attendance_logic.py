@@ -5,10 +5,18 @@ Run with:  pytest   (from the backend/ directory)
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from jose import ExpiredSignatureError
+from jose import ExpiredSignatureError, JWTError
 
 from app.models import AttendanceType
-from app.security import create_qr_token, decode_qr_token
+from app.security import (
+    create_access_token,
+    create_qr_token,
+    create_refresh_token,
+    decode_access_token,
+    decode_qr_token,
+    decode_refresh_token,
+    sha256_hex,
+)
 from app.services import next_attendance_type
 
 
@@ -44,6 +52,35 @@ def test_expired_qr_token_rejected(monkeypatch):
     data = security.create_qr_token()
     with pytest.raises(ExpiredSignatureError):
         decode_qr_token(data["token"])
+
+
+def test_access_token_carries_session_id():
+    token = create_access_token(user_id=42, role="teacher", session_id=9)
+    claims = decode_access_token(token)
+    assert claims["sub"] == "42"
+    assert claims["sid"] == 9
+    assert claims["type"] == "access"
+
+
+def test_refresh_token_roundtrip():
+    data = create_refresh_token(user_id=42, session_id=9)
+    claims = decode_refresh_token(data["token"])
+    assert claims["sub"] == "42"
+    assert claims["sid"] == 9
+    assert claims["type"] == "refresh"
+
+
+def test_access_and_refresh_secrets_are_not_interchangeable():
+    """A refresh token must not validate as an access token (separate secrets)."""
+    refresh = create_refresh_token(user_id=1, session_id=1)["token"]
+    with pytest.raises(JWTError):
+        decode_access_token(refresh)
+
+
+def test_sha256_hex_is_stable_and_sized():
+    assert sha256_hex("device-abc") == sha256_hex("device-abc")
+    assert sha256_hex("a") != sha256_hex("b")
+    assert len(sha256_hex("x")) == 64
 
 
 def test_qr_token_uses_server_clock_not_client(monkeypatch):

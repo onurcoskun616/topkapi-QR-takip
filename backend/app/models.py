@@ -83,6 +83,42 @@ class AttendanceLog(Base):
     )
 
 
+class Session(Base):
+    """A teacher/admin login session bound to a single device.
+
+    Enforces the "one active device per account" rule: on every successful
+    login the user's existing sessions are deleted and a fresh row is created.
+    The long-lived refresh token references this row by id (``sid``); a session
+    that is missing, revoked or expired invalidates both the refresh token and
+    any still-valid access token carrying its ``sid``.
+    """
+
+    __tablename__ = "sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    # SHA-256 of the device fingerprint supplied at login; compared on refresh.
+    device_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    # SHA-256 of the issued refresh token (raw token never stored).
+    refresh_token_hash: Mapped[str] = mapped_column(
+        String(64), index=True, nullable=False
+    )
+    revoked: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    last_used_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship()
+
+
 class UsedQrToken(Base):
     """Replay-protection ledger.
 

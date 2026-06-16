@@ -31,8 +31,17 @@ async function request(path, { method = "GET", body, token } = {}) {
 }
 
 export const api = {
-  login: (email, password) =>
-    request("/api/auth/login", { method: "POST", body: { email, password } }),
+  login: (email, password, deviceFingerprint) =>
+    request("/api/auth/login", {
+      method: "POST",
+      body: { email, password, device_fingerprint: deviceFingerprint },
+    }),
+
+  refresh: (refreshToken, deviceFingerprint) =>
+    request("/api/auth/refresh", {
+      method: "POST",
+      body: { refresh_token: refreshToken, device_fingerprint: deviceFingerprint },
+    }),
 
   me: (token) => request("/api/auth/me", { token }),
 

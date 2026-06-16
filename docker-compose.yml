@@ -22,10 +22,13 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://topkapi:topkapi@db:5432/topkapi_qr
-      AUTH_SECRET: dev-auth-secret-change-in-production
+      AUTH_SECRET: dev-access-secret-change-in-production
+      REFRESH_SECRET: dev-refresh-secret-change-in-production
       QR_SECRET: dev-qr-secret-change-in-production
       QR_TOKEN_TTL_SECONDS: "15"
-      CORS_ORIGINS: "http://localhost:5173,http://localhost:5174,http://localhost:19006"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "15"
+      REFRESH_TOKEN_EXPIRE_DAYS: "365"
+      CORS_ORIGINS: "http://localhost:5173,http://localhost:5174,http://localhost:5175"
       ATTENDANCE_TIMEZONE: "Europe/Istanbul"
       BOOTSTRAP_ADMIN_EMAIL: "admin@topkapi.k12.tr"
       BOOTSTRAP_ADMIN_PASSWORD: "ChangeThisAdminPassword123!"
