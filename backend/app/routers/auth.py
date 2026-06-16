@@ -40,6 +40,17 @@ async def me(current: User = Depends(get_current_user)):
     return current
 
 
+@router.get(
+    "/users",
+    response_model=list[UserResponse],
+    dependencies=[Depends(get_current_admin)],
+)
+async def list_users(db: AsyncSession = Depends(get_db)):
+    """Admin-only: list all accounts (for the admin panel)."""
+    result = await db.execute(select(User).order_by(User.full_name))
+    return list(result.scalars().all())
+
+
 @router.post(
     "/users",
     response_model=UserResponse,

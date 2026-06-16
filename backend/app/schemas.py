@@ -1,5 +1,5 @@
 """Pydantic request/response models."""
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -78,3 +78,19 @@ class AttendanceLogResponse(BaseModel):
 
 class AttendanceLogWithUser(AttendanceLogResponse):
     user_full_name: str
+
+
+# --------------------------------------------------------------------------- #
+# Reporting / presence
+# --------------------------------------------------------------------------- #
+class PresenceEntry(BaseModel):
+    user_id: int
+    full_name: str
+    since: datetime
+
+
+class TodaySummary(BaseModel):
+    date: date
+    active_today: int
+    currently_in_count: int
+    currently_in: list[PresenceEntry]

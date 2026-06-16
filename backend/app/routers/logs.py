@@ -1,22 +1,53 @@
-"""Attendance log querying.
+"""Attendance log querying, reporting and CSV export.
 
 * Teachers can list their own history.
-* Admins can list everyone's, optionally filtered by user/date.
+* Admins can list everyone's, export CSV, and see who is currently inside.
 """
+import csv
+import io
 from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from fastapi.responses import StreamingResponse
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..database import get_db
 from ..deps import get_current_admin, get_current_user
-from ..models import AttendanceLog, User
-from ..schemas import AttendanceLogResponse, AttendanceLogWithUser
+from ..models import AttendanceLog, AttendanceType, User
+from ..schemas import (
+    AttendanceLogResponse,
+    AttendanceLogWithUser,
+    PresenceEntry,
+    TodaySummary,
+)
+from ..services import local_day_bounds_utc
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
+
+
+def _filtered_logs_stmt(
+    user_id: int | None, day: date | None, limit: int | None
+) -> Select:
+    stmt = (
+        select(AttendanceLog, User.full_name, User.email)
+        .join(User, User.id == AttendanceLog.user_id)
+        .order_by(AttendanceLog.scan_time.desc())
+    )
+    if user_id is not None:
+        stmt = stmt.where(AttendanceLog.user_id == user_id)
+    if day is not None:
+        tz = ZoneInfo(settings.attendance_timezone)
+        start = datetime.combine(day, time.min, tzinfo=tz).astimezone(timezone.utc)
+        end = datetime.combine(day, time.max, tzinfo=tz).astimezone(timezone.utc)
+        stmt = stmt.where(
+            AttendanceLog.scan_time >= start, AttendanceLog.scan_time <= end
+        )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    return stmt
 
 
 @router.get("/me", response_model=list[AttendanceLogResponse])
@@ -45,23 +76,7 @@ async def all_logs(
     day: date | None = Query(None, description="Filter to a single local day (YYYY-MM-DD)"),
     limit: int = Query(200, ge=1, le=1000),
 ):
-    stmt = (
-        select(AttendanceLog, User.full_name)
-        .join(User, User.id == AttendanceLog.user_id)
-        .order_by(AttendanceLog.scan_time.desc())
-        .limit(limit)
-    )
-    if user_id is not None:
-        stmt = stmt.where(AttendanceLog.user_id == user_id)
-    if day is not None:
-        tz = ZoneInfo(settings.attendance_timezone)
-        start = datetime.combine(day, time.min, tzinfo=tz).astimezone(timezone.utc)
-        end = datetime.combine(day, time.max, tzinfo=tz).astimezone(timezone.utc)
-        stmt = stmt.where(
-            AttendanceLog.scan_time >= start, AttendanceLog.scan_time <= end
-        )
-
-    result = await db.execute(stmt)
+    result = await db.execute(_filtered_logs_stmt(user_id, day, limit))
     return [
         AttendanceLogWithUser(
             id=log.id,
@@ -71,5 +86,116 @@ async def all_logs(
             status=log.status,
             user_full_name=full_name,
         )
-        for log, full_name in result.all()
+        for log, full_name, _email in result.all()
     ]
+
+
+@router.get(
+    "/export",
+    dependencies=[Depends(get_current_admin)],
+    response_class=StreamingResponse,
+)
+async def export_logs_csv(
+    db: AsyncSession = Depends(get_db),
+    user_id: int | None = None,
+    day: date | None = Query(None, description="Filter to a single local day (YYYY-MM-DD)"),
+):
+    """Stream filtered attendance logs as a CSV file (admin only).
+
+    Timestamps are emitted in both UTC and the configured local timezone so the
+    report is unambiguous regardless of who opens it.
+    """
+    tz = ZoneInfo(settings.attendance_timezone)
+    result = await db.execute(_filtered_logs_stmt(user_id, day, limit=None))
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            "log_id",
+            "user_id",
+            "full_name",
+            "email",
+            "type",
+            "status",
+            "scan_time_utc",
+            f"scan_time_local ({settings.attendance_timezone})",
+        ]
+    )
+    for log, full_name, email in result.all():
+        scan_utc = log.scan_time.astimezone(timezone.utc)
+        writer.writerow(
+            [
+                log.id,
+                log.user_id,
+                full_name,
+                email,
+                log.type.value,
+                log.status.value,
+                scan_utc.isoformat(),
+                scan_utc.astimezone(tz).isoformat(),
+            ]
+        )
+
+    buffer.seek(0)
+    filename = f"attendance_{day.isoformat() if day else 'all'}.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/summary/today",
+    response_model=TodaySummary,
+    dependencies=[Depends(get_current_admin)],
+)
+async def today_summary(db: AsyncSession = Depends(get_db)):
+    """Who is currently inside (last record today is IN), plus daily counts."""
+    now_utc = datetime.now(timezone.utc)
+    start_utc, end_utc = local_day_bounds_utc(now_utc)
+
+    latest_subq = (
+        select(
+            AttendanceLog.user_id.label("uid"),
+            func.max(AttendanceLog.scan_time).label("max_time"),
+        )
+        .where(
+            AttendanceLog.scan_time >= start_utc,
+            AttendanceLog.scan_time <= end_utc,
+        )
+        .group_by(AttendanceLog.user_id)
+        .subquery()
+    )
+
+    rows = await db.execute(
+        select(AttendanceLog, User.full_name)
+        .join(
+            latest_subq,
+            (AttendanceLog.user_id == latest_subq.c.uid)
+            & (AttendanceLog.scan_time == latest_subq.c.max_time),
+        )
+        .join(User, User.id == AttendanceLog.user_id)
+        .order_by(User.full_name)
+    )
+
+    currently_in: list[PresenceEntry] = []
+    total_active = 0
+    for log, full_name in rows.all():
+        total_active += 1
+        if log.type == AttendanceType.IN:
+            currently_in.append(
+                PresenceEntry(
+                    user_id=log.user_id,
+                    full_name=full_name,
+                    since=log.scan_time,
+                )
+            )
+
+    return TodaySummary(
+        date=start_utc.astimezone(ZoneInfo(settings.attendance_timezone)).date(),
+        active_today=total_active,
+        currently_in_count=len(currently_in),
+        currently_in=currently_in,
+    )

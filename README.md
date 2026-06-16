@@ -22,6 +22,7 @@ imzalı dinamik QR kodları** ile takip eden uçtan uca bir sistem.
 | `backend/`    | Python · FastAPI · SQLAlchemy(async) · PostgreSQL · APScheduler | API, JWT auth, QR üretimi, scan mantığı, cron |
 | `kiosk-app/`  | React · Vite · qrcode.react       | Tam ekran tablet; QR'ı 15 sn'de bir yeniler      |
 | `mobile-app/` | Expo · React Native · expo-camera | Öğretmen girişi + QR okutma                       |
+| `admin-app/`  | React · Vite                      | Yönetici paneli: raporlar, doluluk, CSV, kullanıcı yönetimi |
 
 ## Teknoloji seçimi
 

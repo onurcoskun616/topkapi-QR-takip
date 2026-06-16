@@ -31,11 +31,14 @@ uvicorn app.main:app --reload --port 8000
 | ------ | ------------------------ | ------ | ------------------------------------- |
 | POST   | `/api/auth/login`        | —      | E-posta + şifre → JWT                 |
 | GET    | `/api/auth/me`           | user   | Mevcut kullanıcı                      |
+| GET    | `/api/auth/users`        | admin  | Tüm kullanıcıları listele             |
 | POST   | `/api/auth/users`        | admin  | Yeni öğretmen/admin oluştur           |
 | GET    | `/api/qr/token`          | —      | Taze QR token (15 sn)                 |
 | POST   | `/api/scan`              | user   | QR okut → IN/OUT toggle               |
 | GET    | `/api/logs/me`           | user   | Kendi geçmişi                         |
 | GET    | `/api/logs`              | admin  | Tüm kayıtlar (user_id/day filtreli)   |
+| GET    | `/api/logs/export`       | admin  | CSV dışa aktarım (UTC + yerel saat)   |
+| GET    | `/api/logs/summary/today`| admin  | Şu an içeride olanlar + günlük sayılar|
 | POST   | `/api/admin/run-auto-close` | admin | Gece kapanışını elle tetikle        |
 | GET    | `/health`                | —      | Sağlık + sunucu saati                 |
 
