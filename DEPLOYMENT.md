@@ -103,9 +103,20 @@ Backend ilk açılışta **5 kampüsü** (İkitelli OSB, İstanbul OSB, Esenyurt
    **Onayla**'ya basınca personel QR okutmaya başlar.
 4. Personel telefon değiştirirse müdür **Personel ▸ Cihazı Sıfırla** der;
    personel yeni telefonda aynı numarayla yeniden kaydolur (geçmiş korunur).
+5. Personel telefonu arızalanır/QR okutmayı unutursa müdür **Personel ▸
+   Manuel Kayıt** ile eksik IN/OUT kaydını ekler; var olan bir QR kaydı asla
+   değiştirilemez.
+6. Sağlık raporu, ücretli izin vb. durumlarda müdür **İzin / Devamsızlık**
+   sekmesinden tarih aralıklı bir kayıt açar; aktif olduğu sürece personelin
+   QR okutması engellenir. Personel gelirse kayıt **Düzelt**ilir veya **İptal
+   Et**ilir — scan hemen yeniden açılır.
+7. **Kampüsler** sekmesinden (yalnızca genel merkez) her kampüsün mesai
+   başlangıç/bitiş saati belirlenir; **Raporlar** sekmesindeki geç kalma/erken
+   çıkış hesaplamaları bu saatlere dayanır.
 
 > Genel merkez panelde **kampüs filtresi** ile tek tek kampüsleri veya tümünü
-> görebilir, CSV'yi kampüs kırılımıyla indirebilir.
+> görebilir; **Raporlar** sekmesinden tarih aralığı, tolerans dakikası ve
+> hafta sonu filtreleriyle CSV/Excel indirebilir.
 
 ## 5. Öğretmen/personel PWA'sını dağıt (App Store/Play Store yok)
 

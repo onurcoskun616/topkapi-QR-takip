@@ -23,7 +23,7 @@ imzalı dinamik QR kodları** ile takip eden uçtan uca bir sistem.
 | `backend/`          | Python · FastAPI · SQLAlchemy(async) · PostgreSQL · APScheduler | API, dual-token auth, QR üretimi, scan mantığı, cron |
 | `kiosk-app/`        | React · Vite · qrcode.react       | Tam ekran tablet; QR'ı 15 sn'de bir yeniler      |
 | `pwa-mobile-client/`| React · Vite · vite-plugin-pwa · html5-qrcode | Öğretmen PWA'sı: "Ana Ekrana Ekle", doğrudan kamera, sessiz oturum yenileme |
-| `admin-app/`        | React · Vite                      | Müdür/genel merkez paneli: kampüs raporları, personel onayı, cihaz sıfırlama, CSV, müdür yönetimi |
+| `admin-app/`        | React · Vite                      | Müdür/genel merkez paneli: kampüs raporları, personel onayı, cihaz sıfırlama, manuel kayıt, izin/devamsızlık, CSV/Excel, müdür ve mesai saati yönetimi |
 
 ## Çok kampüslü yapı (5 kampüs · ~700 personel)
 
@@ -73,6 +73,23 @@ Backend için **FastAPI** seçildi: async I/O, otomatik OpenAPI dokümantasyonu
    telefonda **aynı numarayla** yeniden kaydolup cihazı bağlar (geçmiş korunur).
 8. **Kampüs kapsamı:** Müdür yalnızca kendi kampüsünün personelini ve raporlarını
    görür/yönetir; genel merkez tüm kampüsleri görür ve `campus_id` ile filtreler.
+9. **Manuel kayıt düzeltmesi:** Telefon arızalanırsa/unutulursa müdür panelden
+   eksik IN/OUT kaydını **manuel olarak ekleyebilir**; var olan bir QR kaydını
+   asla değiştiremez — bu kayıtlar raporlarda "manuel" olarak işaretlenir.
+10. **İzin/devamsızlık takibi:** Müdür, personel için açık uçlu bir nedenle
+    (sağlık raporu, ücretli izin, vb. — serbest metin) tarih aralıklı izin
+    kaydı açar; aktif izin süresince QR okutma engellenir. Personel gelirse
+    kayıt düzeltilir veya iptal edilir — scan hemen yeniden açılır. İzinle
+    açıklanmayan devamsız günler raporlarda **"durum girilmedi" (unresolved)**
+    olarak işaretlenir, hiçbir zaman sessizce atlanmaz.
+11. **Raporlama:** Günlük/haftalık/aylık/yıllık veya keyfi tarih aralığı,
+    geç kalma/erken çıkma toleransı (dakika) ve hafta sonu hariç tutma
+    filtreleriyle en çok geç kalanlar, en çok erken çıkanlar, en çok devamsız
+    olanlar ve izin türü istatistikleri; ham kayıtlar ve raporlar CSV/Excel
+    olarak indirilebilir.
+12. **Mesai saatleri yalnızca genel merkezde:** Her kampüsün mesai
+    başlangıç/bitiş saatini sadece **genel merkez** belirler; geç kalma/erken
+    çıkış raporları bu saatlere dayanır.
 
 ## Hızlı başlangıç (Docker)
 

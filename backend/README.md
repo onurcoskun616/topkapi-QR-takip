@@ -61,10 +61,51 @@ uvicorn app.main:app --reload --port 8000
 | POST   | `/api/scan`                  | staff (aktif) | QR okut → IN/OUT toggle                        |
 | GET    | `/api/logs/me`               | staff     | Kendi geçmişi                                     |
 | GET    | `/api/logs`                  | yönetici  | Kayıtlar (kampüs kapsamlı; hq `campus_id` filtreli)|
-| GET    | `/api/logs/export`           | yönetici  | CSV dışa aktarım (UTC + yerel saat + kampüs)      |
+| POST   | `/api/logs/manual`           | yönetici  | Manuel giriş/çıkış kaydı ekle (telefon arızalı vb. — yalnızca eksik kaydı tamamlar, var olan QR kaydını değiştiremez) |
+| GET    | `/api/logs/export`           | yönetici  | CSV dışa aktarım (UTC + yerel saat + kampüs, tarih aralığı filtreli) |
+| GET    | `/api/logs/export.xlsx`      | yönetici  | Aynı ham kayıtların Excel (.xlsx) dışa aktarımı   |
 | GET    | `/api/logs/summary/today`    | yönetici  | Şu an içeride olanlar + günlük sayılar (kampüs kapsamlı) |
+| GET    | `/api/leaves/types`          | yönetici  | Önerilen izin/devamsızlık türleri (açık liste — serbest metin de girilebilir) |
+| GET    | `/api/leaves`                | yönetici  | İzin/devamsızlık kayıtlarını listele (personel/kampüs/durum/tarih filtreli) |
+| POST   | `/api/leaves`                | yönetici  | Personel için tarih aralığı kapsayan izin/devamsızlık kaydı oluştur (aktifken QR okutmayı engeller) |
+| PATCH  | `/api/leaves/{id}`           | yönetici  | İzin kaydını düzelt (tür/tarih aralığı/not/durum)  |
+| POST   | `/api/leaves/{id}/cancel`    | yönetici  | İzin kaydını iptal et (personel anında yeniden QR okutabilir) |
+| GET    | `/api/reports/late`          | yönetici  | En çok geç kalanlar sıralaması (tolerans dakikası + kampüs mesai saatine göre) |
+| GET    | `/api/reports/early-leave`   | yönetici  | En çok erken çıkanlar sıralaması                  |
+| GET    | `/api/reports/absences`      | yönetici  | Devamsızlık günü detayı (izinle açıklanan / `unresolved` — açıklanmayan) |
+| GET    | `/api/reports/absence-summary` | yönetici | İzin türüne göre toplam + personel başına devamsızlık özeti |
+| GET    | `/api/reports/export.xlsx`   | yönetici  | Yukarıdaki rapor tablolarının tamamını Excel'e aktar |
+| PATCH  | `/api/campuses/{id}/shift`   | **hq**    | Kampüsün mesai başlangıç/bitiş saatini belirle (yalnızca genel merkez; müdürün yetkisi yok) |
 | POST   | `/api/admin/run-auto-close`  | hq        | Gece kapanışını elle tetikle                      |
 | GET    | `/health`                    | —         | Sağlık + sunucu saati                             |
+
+## Manuel kayıt, izin/devamsızlık ve raporlama (özet)
+
+- **Manuel kayıt** (`POST /api/logs/manual`): Yönetici, telefonu arızalanan ya
+  da QR okutmayı unutan personel için geçmiş bir IN/OUT kaydı **ekleyebilir**;
+  var olan bir QR kaydını **asla değiştiremez veya silemez** —
+  `AttendanceSource.director_manual` olarak işaretlenir ve raporlarda/CSV'de
+  ayırt edilebilir. Aynı gün için zaten bir IN varsa tekrar IN eklemek **409**
+  döner; gelecek tarihli kayıt **400** ile reddedilir.
+- **İzin/devamsızlık** (`LeaveRecord`): Yönetici, personel için açık uçlu bir
+  metinle (`leave_type` — "Sağlık raporu", "Ücretli izin" vb., serbest metin de
+  kabul edilir) bir tarih aralığı kaydeder. Kayıt `active` olduğu ve bugünün
+  yerel tarihi aralığa girdiği sürece `/api/scan` o personelin QR okutmasını
+  reddeder ("müdürünüze başvurun" mesajıyla). Personel asıl gelirse yönetici
+  `PATCH` ile aralığı kısaltır veya `cancel` ile tamamen iptal eder — ikisi de
+  scan'i **anında** yeniden açar. İzinle açıklanmayan devamsız günler
+  raporlarda **hiçbir zaman sessizce atlanmaz**; `unresolved` (durum
+  girilmedi) olarak işaretlenir.
+- **Raporlama**: Tüm rapor uç noktaları (`/api/reports/*`) keyfi
+  `start_date`/`end_date` aralığı, `threshold_minutes` (geç kalma/erken çıkma
+  toleransı) ve `exclude_weekends` filtreleri kabul eder; hq ayrıca
+  `campus_id` ile tek kampüse indirgeyebilir. Hem ham kayıtlar
+  (`/api/logs/export.xlsx`) hem de rapor tabloları
+  (`/api/reports/export.xlsx`) Excel olarak indirilebilir.
+- **Mesai saatleri**: `Campus.shift_start`/`shift_end` geç kalma ve erken
+  çıkış hesaplamalarının dayanağıdır; yalnızca **hq** bu saatleri
+  değiştirebilir (`PATCH /api/campuses/{id}/shift`) — kampüs müdürünün bu uç
+  noktaya erişimi yoktur (403).
 
 ## Cron / arka plan görevleri (APScheduler)
 
