@@ -1,0 +1,29 @@
+# Caddy edge config. Domains and ACME email come from the environment
+# (set in .env.prod and passed through docker-compose.prod.yml).
+{
+	email {$ACME_EMAIL}
+}
+
+# API — reverse proxy to the FastAPI backend.
+{$API_DOMAIN} {
+	encode gzip
+	reverse_proxy backend:8000
+}
+
+# Kiosk (tablet) — static SPA served by its nginx container.
+{$KIOSK_DOMAIN} {
+	encode gzip
+	reverse_proxy kiosk:80
+}
+
+# Admin panel — static SPA served by its nginx container.
+{$PANEL_DOMAIN} {
+	encode gzip
+	reverse_proxy admin:80
+}
+
+# Teacher PWA — installable web app served by its nginx container.
+{$APP_DOMAIN} {
+	encode gzip
+	reverse_proxy pwa:80
+}

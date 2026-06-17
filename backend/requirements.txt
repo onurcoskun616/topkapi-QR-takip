@@ -1,0 +1,19 @@
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+sqlalchemy[asyncio]==2.0.30
+asyncpg==0.29.0
+pydantic==2.7.4
+pydantic-settings==2.3.4
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.3
+python-multipart==0.0.9
+apscheduler==3.10.4
+# Pin tzlocal (an APScheduler dependency): 5.3+ shipped broken/empty wheels that
+# install but expose no module, breaking "import apscheduler". 5.2 is stable.
+tzlocal==5.2
+email-validator==2.1.1
+openpyxl==3.1.5
+# Test-only: backend/tests/conftest.py spins up a real app instance against a
+# throwaway SQLite DB per test (production uses asyncpg/PostgreSQL).
+aiosqlite==0.22.1
