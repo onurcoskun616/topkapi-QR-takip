@@ -128,9 +128,9 @@ ayağa kalktı). App Store / Google Play süreci **gerekmez**. Personel:
    - **iPhone (Safari):** Paylaş ▸ "Ana Ekrana Ekle".
    - **Android (Chrome):** ⋮ menü ▸ "Uygulamayı yükle / Ana ekrana ekle".
 3. Uygulamayı ana ekrandan açar; tarayıcı barları olmadan (standalone) açılır.
-4. **Bir kez** ad-soyad, görev, branş, telefon ve kampüsünü girerek **kaydolur**
-   (şifre yok). Kampüs müdürü onayladıktan sonra cihaz 1 yıllık oturuma kilitlenir;
-   sonraki günler uygulama doğrudan kameraya açılır.
+4. **Bir kez** ad-soyad, görev, branş, **doğum tarihi**, telefon ve kampüsünü
+   girerek **kaydolur** (şifre yok). Kampüs müdürü onayladıktan sonra cihaz 1
+   yıllık oturuma kilitlenir; sonraki günler uygulama doğrudan kameraya açılır.
 
 > Güvenlik: Her hesap **telefon numarasıyla** tek bir cihaza bağlıdır. Başka bir
 > telefondan aynı numarayla kayıt, müdür "Cihazı Sıfırla" demeden **reddedilir**
@@ -142,6 +142,13 @@ ayağa kalktı). App Store / Google Play süreci **gerekmez**. Personel:
 Tabletlerde `https://kiosk.okulunuz.com` adresini tam ekran aç. Cihazı tek
 uygulamaya kilitlemek ve ekranı sürekli açık tutmak için **Fully Kiosk
 Browser** gibi bir uygulama önerilir.
+
+> **Doğum günü kutlaması için kampüs belirt:** Her tableti kendi kampüsünün
+> kimliğiyle aç — `https://kiosk.okulunuz.com/?campus=<KAMPUS_ID>` (kampüs
+> id'leri genel merkez panelindeki **Kampüsler** sekmesinden görülebilir).
+> Doğum günü olan personel o kampüste gün içindeki ilk QR girişini yapınca
+> tablet tam ekran "İyi ki doğdun!" kutlaması gösterir. `?campus=` verilmezse
+> kiosk normal çalışır, yalnızca doğum günü kutlaması devre dışı kalır.
 
 ---
 

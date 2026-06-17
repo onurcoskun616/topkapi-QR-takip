@@ -10,10 +10,11 @@ from .bootstrap import (
     create_tables,
     ensure_bootstrap_admin,
     ensure_campuses,
+    ensure_schema_upgrades,
 )
 from .config import settings
 from .deps import get_current_hq
-from .routers import auth, campuses, leaves, logs, management, qr, reports, scan
+from .routers import auth, campuses, kiosk, leaves, logs, management, qr, reports, scan
 from .tasks.scheduler import (
     auto_close_open_attendances,
     shutdown_scheduler,
@@ -26,6 +27,7 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await create_tables()
+    await ensure_schema_upgrades()
     await ensure_campuses()
     await ensure_bootstrap_admin()
     start_scheduler()
@@ -57,6 +59,7 @@ app.include_router(scan.router)
 app.include_router(logs.router)
 app.include_router(leaves.router)
 app.include_router(reports.router)
+app.include_router(kiosk.router)
 
 
 @app.get("/health", tags=["system"])

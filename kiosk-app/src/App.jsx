@@ -1,6 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { fetchQrToken } from "./api";
+import { fetchQrToken, fetchCelebrations } from "./api";
+import BirthdayOverlay from "./BirthdayOverlay";
+
+// The kiosk learns which campus it belongs to from the tablet URL, e.g.
+// https://kiosk.okulunuz.com/?campus=3  — needed so a birthday at one campus
+// only celebrates on that campus's tablets. Falls back to a build-time env var.
+function readCampusId() {
+  const fromQuery = new URLSearchParams(window.location.search).get("campus");
+  return fromQuery || import.meta.env.VITE_CAMPUS_ID || null;
+}
+
+// How long each birthday greeting stays on screen, and how often we poll.
+const CELEBRATION_DISPLAY_MS = 9000;
+const CELEBRATION_POLL_MS = 5000;
 
 /**
  * Full-screen kiosk:
@@ -20,6 +33,12 @@ export default function App() {
   // server: remaining time is computed against server-synced "now".
   const serverOffsetRef = useRef(0);
   const abortRef = useRef(null);
+
+  // Birthday celebrations polled from the backend for this kiosk's campus.
+  const campusIdRef = useRef(readCampusId());
+  const [celebration, setCelebration] = useState(null); // { full_name } | null
+  const seenLogIdsRef = useRef(new Set());
+  const celebrationTimerRef = useRef(null);
 
   const refresh = useCallback(async () => {
     abortRef.current?.abort();
@@ -68,11 +87,61 @@ export default function App() {
     return () => clearInterval(interval);
   }, [expiresAt, refresh]);
 
+  // Poll for birthday first-IN scans on this campus and queue a greeting for
+  // any we haven't shown yet. De-dupe by log id so each person shows once.
+  useEffect(() => {
+    const campusId = campusIdRef.current;
+    if (!campusId) return; // no campus configured → birthday feature off
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const poll = async () => {
+      try {
+        const data = await fetchCelebrations(campusId, controller.signal);
+        if (cancelled) return;
+        for (const c of data.celebrations || []) {
+          if (seenLogIdsRef.current.has(c.log_id)) continue;
+          seenLogIdsRef.current.add(c.log_id);
+          // Show now if nothing is on screen; otherwise the next poll picks it
+          // up once the current greeting clears.
+          setCelebration((current) => current || { full_name: c.full_name });
+        }
+      } catch {
+        /* transient; next tick retries */
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, CELEBRATION_POLL_MS);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Auto-dismiss the current greeting after a few seconds.
+  useEffect(() => {
+    if (!celebration) return;
+    celebrationTimerRef.current = setTimeout(
+      () => setCelebration(null),
+      CELEBRATION_DISPLAY_MS
+    );
+    return () => clearTimeout(celebrationTimerRef.current);
+  }, [celebration]);
+
   const progress = Math.min(100, Math.max(0, (remaining / ttl) * 100));
   const isStale = remaining <= 0 || !token;
 
   return (
     <div className="kiosk">
+      {celebration && (
+        <BirthdayOverlay
+          name={celebration.full_name}
+          onDone={() => setCelebration(null)}
+        />
+      )}
       <h1 className="kiosk__title">Topkapı Okulları</h1>
       <p className="kiosk__subtitle">
         Giriş / Çıkış için telefonunuzla QR kodu okutun

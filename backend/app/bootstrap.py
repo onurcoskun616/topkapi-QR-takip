@@ -1,7 +1,7 @@
 """First-run helpers: create tables, seed campuses, and a head-office account."""
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
 
 from .config import settings
 from .database import AsyncSessionLocal, Base, engine
@@ -23,6 +23,35 @@ DEFAULT_CAMPUSES: list[tuple[str, str]] = [
 async def create_tables() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+
+# Lightweight, idempotent "add missing column" migrations for databases created
+# before a column was introduced. ``create_all`` only creates *new* tables; it
+# never alters an existing one, so a column added to a model later needs this.
+# Each entry: (table, column, column DDL type). ``ADD COLUMN <type>`` is valid
+# on both SQLite and PostgreSQL for a nullable column with no default.
+_COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
+    ("users", "birth_date", "DATE"),
+]
+
+
+def _apply_column_migrations(sync_conn) -> None:
+    inspector = inspect(sync_conn)
+    existing_tables = set(inspector.get_table_names())
+    for table, column, ddl_type in _COLUMN_MIGRATIONS:
+        if table not in existing_tables:
+            continue  # create_all will have built it with the column already
+        columns = {col["name"] for col in inspector.get_columns(table)}
+        if column in columns:
+            continue
+        sync_conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {ddl_type}'))
+        logger.info("Schema upgrade: added %s.%s", table, column)
+
+
+async def ensure_schema_upgrades() -> None:
+    """Add any columns introduced after the table was first created."""
+    async with engine.begin() as conn:
+        await conn.run_sync(_apply_column_migrations)
 
 
 async def ensure_campuses() -> None:

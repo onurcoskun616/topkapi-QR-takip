@@ -44,6 +44,7 @@ class RegisterRequest(BaseModel):
     phone: str = Field(min_length=7, max_length=32)
     job_title: str = Field(min_length=2, max_length=80)   # görev
     branch: str = Field(min_length=1, max_length=80)      # branş
+    birth_date: date                                      # doğum tarihi
     campus_id: int
     device_fingerprint: str = Field(min_length=8, max_length=256)
 
@@ -87,6 +88,7 @@ class UserResponse(BaseModel):
     email: EmailStr | None = None
     job_title: str | None = None
     branch: str | None = None
+    birth_date: date | None = None
     campus_id: int | None = None
     campus_name: str | None = None
     has_device: bool = False
@@ -109,6 +111,7 @@ class StaffUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=120)
     job_title: str | None = Field(default=None, min_length=2, max_length=80)
     branch: str | None = Field(default=None, min_length=1, max_length=80)
+    birth_date: date | None = None
     campus_id: int | None = None
 
 
@@ -136,6 +139,23 @@ class ScanResponse(BaseModel):
     message: str
     scan_time: datetime
     user_full_name: str
+
+
+# --------------------------------------------------------------------------- #
+# Kiosk birthday celebrations
+# --------------------------------------------------------------------------- #
+class BirthdayCelebration(BaseModel):
+    """A staff member whose birthday is today and who just scanned their first
+    IN of the day on the kiosk — surfaced so the tablet can celebrate them."""
+
+    user_id: int
+    full_name: str
+    log_id: int
+    scan_time: datetime
+
+
+class CelebrationsResponse(BaseModel):
+    celebrations: list[BirthdayCelebration]
 
 
 # --------------------------------------------------------------------------- #

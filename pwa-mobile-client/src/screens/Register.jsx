@@ -7,6 +7,7 @@ const EMPTY = {
   phone: "",
   job_title: "",
   branch: "",
+  birth_date: "",
   campus_id: "",
 };
 
@@ -28,7 +29,14 @@ export default function Register() {
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    if (!form.full_name || !form.phone || !form.job_title || !form.branch || !form.campus_id) {
+    if (
+      !form.full_name ||
+      !form.phone ||
+      !form.job_title ||
+      !form.branch ||
+      !form.birth_date ||
+      !form.campus_id
+    ) {
       setError("Lütfen tüm alanları doldurun.");
       return;
     }
@@ -81,6 +89,17 @@ export default function Register() {
           onChange={onChange("branch")}
           disabled={busy}
         />
+        <label className="field-label">
+          Doğum tarihi
+          <input
+            className="input"
+            type="date"
+            value={form.birth_date}
+            onChange={onChange("birth_date")}
+            disabled={busy}
+            max={new Date().toISOString().slice(0, 10)}
+          />
+        </label>
         <select
           className="input"
           value={form.campus_id}

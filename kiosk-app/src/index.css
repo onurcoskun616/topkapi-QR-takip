@@ -113,3 +113,76 @@ body {
 .status--error {
   color: #ff8a8a;
 }
+
+/* ---- Birthday celebration overlay ---- */
+.birthday {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 50% 40%, rgba(19, 50, 92, 0.96), rgba(11, 31, 58, 0.98));
+  overflow: hidden;
+  animation: birthday-fade 0.4s ease-out;
+  cursor: pointer;
+}
+@keyframes birthday-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.birthday__card {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding: clamp(24px, 5vw, 56px);
+  animation: birthday-pop 0.6s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+@keyframes birthday-pop {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.birthday__emoji {
+  font-size: clamp(3rem, 10vw, 6rem);
+  line-height: 1;
+  animation: birthday-bounce 1.6s ease-in-out infinite;
+}
+@keyframes birthday-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+.birthday__greeting {
+  margin-top: 18px;
+  font-size: clamp(1.6rem, 5vw, 3rem);
+  font-weight: 700;
+  color: var(--accent);
+}
+.birthday__name {
+  margin-top: 10px;
+  font-size: clamp(2.2rem, 7vw, 4.5rem);
+  font-weight: 800;
+  color: var(--text);
+}
+.birthday__sub {
+  margin-top: 14px;
+  font-size: clamp(1rem, 2.6vw, 1.6rem);
+  color: var(--muted);
+}
+.birthday__confetti {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.birthday__piece {
+  position: absolute;
+  top: -5%;
+  border-radius: 2px;
+  opacity: 0.9;
+  animation-name: birthday-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes birthday-fall {
+  0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(110vh) rotate(540deg); opacity: 0.6; }
+}

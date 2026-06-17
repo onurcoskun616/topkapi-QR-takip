@@ -142,12 +142,16 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
                 ),
             )
         # Re-claim: same identity, new device. Keep approval status & campus.
+        # Backfill the birth date if the original record predates this field.
+        if user.birth_date is None:
+            user.birth_date = payload.birth_date
     else:
         user = User(
             full_name=payload.full_name.strip(),
             phone=phone,
             job_title=payload.job_title.strip(),
             branch=payload.branch.strip(),
+            birth_date=payload.birth_date,
             role=UserRole.staff,
             status=UserStatus.pending,
             campus_id=campus.id,

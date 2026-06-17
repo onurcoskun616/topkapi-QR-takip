@@ -146,6 +146,8 @@ async def update_staff(
         staff.job_title = payload.job_title.strip()
     if payload.branch is not None:
         staff.branch = payload.branch.strip()
+    if payload.birth_date is not None:
+        staff.birth_date = payload.birth_date
     if payload.campus_id is not None and payload.campus_id != staff.campus_id:
         # A director may not move staff out of their own campus.
         if manager.role == UserRole.campus_director:

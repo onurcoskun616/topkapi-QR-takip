@@ -20,6 +20,7 @@ def to_user_response(
         email=user.email,
         job_title=user.job_title,
         branch=user.branch,
+        birth_date=user.birth_date,
         campus_id=user.campus_id,
         campus_name=campus_name,
         has_device=has_device,

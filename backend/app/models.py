@@ -120,6 +120,9 @@ class User(Base):
     # Staff-only profile fields collected at self-registration.
     job_title: Mapped[str | None] = mapped_column(String(80), nullable=True)   # görev
     branch: Mapped[str | None] = mapped_column(String(80), nullable=True)      # branş
+    # Birth date (staff self-registration). Only the month/day is used, to wish
+    # the person a happy birthday on the kiosk when they scan in.
+    birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="user_role"), default=UserRole.staff, nullable=False

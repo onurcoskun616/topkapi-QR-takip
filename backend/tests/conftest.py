@@ -91,6 +91,7 @@ def seeded(client):
             "phone": "0532 111 22 33",
             "job_title": "Öğretmen",
             "branch": "Matematik",
+            "birth_date": "1990-05-20",
             "campus_id": campus_a["id"],
             "device_fingerprint": "staff-fp-bbbbbbbb",
         },

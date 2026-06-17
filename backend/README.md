@@ -44,7 +44,7 @@ uvicorn app.main:app --reload --port 8000
 | Method | Yol                          | Yetki     | Açıklama                                          |
 | ------ | ---------------------------- | --------- | ------------------------------------------------- |
 | GET    | `/api/campuses`              | —         | Kampüs listesi (kayıt formu açılır menüsü)        |
-| POST   | `/api/auth/register`         | —         | Personel self-kayıt / yeni telefon yeniden tanıtma → access + refresh (beklemede) |
+| POST   | `/api/auth/register`         | —         | Personel self-kayıt / yeni telefon yeniden tanıtma (ad, görev, branş, **doğum tarihi**, telefon, kampüs) → access + refresh (beklemede) |
 | POST   | `/api/auth/login`            | —         | Müdür/genel merkez: e-posta + şifre + cihaz → access + refresh |
 | POST   | `/api/auth/refresh`          | —         | Refresh token + cihaz imzası → yeni access (sessiz) |
 | POST   | `/api/auth/logout`           | user      | Mevcut oturumu (cihazı) geçersiz kıl              |
@@ -58,6 +58,7 @@ uvicorn app.main:app --reload --port 8000
 | POST   | `/api/directors`             | hq        | Yeni kampüs müdürü oluştur                        |
 | POST   | `/api/directors/{id}/disable`| hq        | Müdür hesabını devre dışı bırak                   |
 | GET    | `/api/qr/token`              | —         | Taze QR token (15 sn)                             |
+| GET    | `/api/kiosk/celebrations`    | —         | Kiosk için: `campus_id` ile, bugün doğum günü olup son ~90 sn içinde ilk QR girişini yapan personeli döndürür (tablet kutlaması) |
 | POST   | `/api/scan`                  | staff (aktif) | QR okut → IN/OUT toggle                        |
 | GET    | `/api/logs/me`               | staff     | Kendi geçmişi                                     |
 | GET    | `/api/logs`                  | yönetici  | Kayıtlar (kampüs kapsamlı; hq `campus_id` filtreli)|
@@ -78,6 +79,21 @@ uvicorn app.main:app --reload --port 8000
 | PATCH  | `/api/campuses/{id}/shift`   | **hq**    | Kampüsün mesai başlangıç/bitiş saatini belirle (yalnızca genel merkez; müdürün yetkisi yok) |
 | POST   | `/api/admin/run-auto-close`  | hq        | Gece kapanışını elle tetikle                      |
 | GET    | `/health`                    | —         | Sağlık + sunucu saati                             |
+
+## Doğum günü kutlaması (kiosk)
+
+- Personel **self-kayıtta doğum tarihini** girer (`birth_date`, zorunlu). Bu
+  alan sadece ay/gün için kullanılır.
+- Doğum günü bugün olan personel, gün içindeki **ilk QR girişini** kioskta
+  yapınca tablet tam ekran "İyi ki doğdun!" kutlaması gösterir.
+- Tablet hangi kampüse ait olduğunu URL'den okur (`?campus=<id>`). Kiosk
+  `/api/kiosk/celebrations?campus_id=<id>` ucunu birkaç saniyede bir yoklar;
+  yalnızca son ~90 sn içindeki ilk-giriş `qr_scan` kayıtları döner, böylece
+  sonradan açılan bir tablet eski bir kutlamayı tekrar göstermez. Müdürün
+  **manuel** giriş kaydı kutlama tetiklemez (kimse bizzat okutmuyor).
+- Bu alan modele sonradan eklendiği için, mevcut veritabanlarında
+  `users.birth_date` kolonu açılışta otomatik (idempotent) eklenir
+  (`ensure_schema_upgrades`).
 
 ## Manuel kayıt, izin/devamsızlık ve raporlama (özet)
 

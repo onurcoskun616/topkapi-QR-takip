@@ -84,6 +84,14 @@ body {
 .input:focus {
   outline: 2px solid var(--accent);
 }
+.field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: left;
+}
 
 /* ---- Buttons ---- */
 .btn {
