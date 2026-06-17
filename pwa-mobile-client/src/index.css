@@ -153,6 +153,13 @@ body {
   height: 100% !important;
   object-fit: cover !important;
 }
+/* Suppress html5-qrcode's own scan-region overlay (corner brackets) so only
+   our single .scanner__frame guide is shown — its position is computed from the
+   raw video frame and drifts out of alignment under object-fit: cover. */
+#qr-reader__scan_region img,
+#qr-shaded-region {
+  display: none !important;
+}
 .scanner__hint {
   position: absolute;
   inset: 0;

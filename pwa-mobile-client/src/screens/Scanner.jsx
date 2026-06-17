@@ -83,7 +83,12 @@ export default function Scanner() {
     scanner
       .start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
+        // No qrbox: the library would otherwise draw its own scan-region UI
+        // (corner brackets) positioned from the raw video frame, which drifts
+        // out of alignment with our CSS-centered yellow frame once the video is
+        // letterboxed by object-fit: cover. Scanning the whole frame keeps a
+        // single, accurate guide (our .scanner__frame) and decodes anywhere.
+        { fps: 10 },
         handleDecoded,
         () => {} // per-frame decode failures are normal; ignore
       )
