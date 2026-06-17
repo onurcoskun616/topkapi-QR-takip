@@ -14,18 +14,19 @@ export async function fetchQrToken(signal) {
 }
 
 /**
- * Poll for staff who have a birthday today and just scanned their first IN of
- * the day on this campus, so the kiosk can congratulate them. Returns an empty
- * list when no campus is configured or nothing recent is found.
+ * Poll for this campus's most recent successful QR scans so the tablet can
+ * confirm them (green "Giriş/Çıkış başarılı"), with a `birthday` flag for a
+ * staff member's first IN on their birthday. Returns an empty list when no
+ * campus is configured or nothing recent is found.
  */
-export async function fetchCelebrations(campusId, signal) {
-  if (!campusId) return { celebrations: [] };
+export async function fetchRecentScans(campusId, signal) {
+  if (!campusId) return { scans: [] };
   const res = await fetch(
-    `${API_BASE_URL}/api/kiosk/celebrations?campus_id=${encodeURIComponent(campusId)}`,
+    `${API_BASE_URL}/api/kiosk/recent-scans?campus_id=${encodeURIComponent(campusId)}`,
     { signal }
   );
   if (!res.ok) {
-    throw new Error(`Kutlama isteği başarısız (${res.status})`);
+    throw new Error(`Tarama isteği başarısız (${res.status})`);
   }
-  return res.json(); // { celebrations: [{ user_id, full_name, log_id, scan_time }] }
+  return res.json(); // { scans: [{ log_id, user_id, full_name, type, scan_time, birthday }] }
 }

@@ -58,7 +58,7 @@ uvicorn app.main:app --reload --port 8000
 | POST   | `/api/directors`             | hq        | Yeni kampüs müdürü oluştur                        |
 | POST   | `/api/directors/{id}/disable`| hq        | Müdür hesabını devre dışı bırak                   |
 | GET    | `/api/qr/token`              | —         | Taze QR token (15 sn)                             |
-| GET    | `/api/kiosk/celebrations`    | —         | Kiosk için: `campus_id` ile, bugün doğum günü olup son ~90 sn içinde ilk QR girişini yapan personeli döndürür (tablet kutlaması) |
+| GET    | `/api/kiosk/recent-scans`    | —         | Kiosk için: `campus_id` ile, son ~12 sn içindeki başarılı QR taramalarını döndürür (tablette yeşil "Giriş/Çıkış başarılı" onayı); doğum günü ilk-girişi `birthday` bayrağıyla işaretlenir |
 | POST   | `/api/scan`                  | staff (aktif) | QR okut → IN/OUT toggle                        |
 | GET    | `/api/logs/me`               | staff     | Kendi geçmişi                                     |
 | GET    | `/api/logs`                  | yönetici  | Kayıtlar (kampüs kapsamlı; hq `campus_id` filtreli)|
@@ -80,18 +80,25 @@ uvicorn app.main:app --reload --port 8000
 | POST   | `/api/admin/run-auto-close`  | hq        | Gece kapanışını elle tetikle                      |
 | GET    | `/health`                    | —         | Sağlık + sunucu saati                             |
 
-## Doğum günü kutlaması (kiosk)
+## Tablette tarama onayı ve doğum günü kutlaması (kiosk)
 
-- Personel **self-kayıtta doğum tarihini** girer (`birth_date`, zorunlu). Bu
-  alan sadece ay/gün için kullanılır.
-- Doğum günü bugün olan personel, gün içindeki **ilk QR girişini** kioskta
-  yapınca tablet tam ekran "İyi ki doğdun!" kutlaması gösterir.
-- Tablet hangi kampüse ait olduğunu URL'den okur (`?campus=<id>`). Kiosk
-  `/api/kiosk/celebrations?campus_id=<id>` ucunu birkaç saniyede bir yoklar;
-  yalnızca son ~90 sn içindeki ilk-giriş `qr_scan` kayıtları döner, böylece
-  sonradan açılan bir tablet eski bir kutlamayı tekrar göstermez. Müdürün
-  **manuel** giriş kaydı kutlama tetiklemez (kimse bizzat okutmuyor).
-- Bu alan modele sonradan eklendiği için, mevcut veritabanlarında
+Tarama telefonda yapılır (QR tabletten okunur, `POST /api/scan` telefondan
+gelir), bu yüzden tablet sonucu doğrudan görmez. Tabletin **yeşil onay** ve
+**doğum günü kutlaması** gösterebilmesi için kiosk, kampüsünün son taramalarını
+yoklar.
+
+- Tablet hangi kampüse ait olduğunu URL'den okur (`?campus=<id>`) ve
+  `/api/kiosk/recent-scans?campus_id=<id>` ucunu ~1,5 sn'de bir yoklar.
+- **Yeşil onay:** Her başarılı QR taramasından hemen sonra tablette yeşil tikli
+  "Giriş başarılı" / "Çıkış başarılı" + isim bildirimi çıkar. Yalnızca son ~12
+  sn içindeki geçerli `qr_scan` kayıtları döner (sonradan açılan tablet eski
+  taramaları tekrar göstermez); müdürün **manuel** kaydı ve gece otomatik
+  kapanışı tablette gösterilmez (kimse bizzat okutmuyor).
+- **Doğum günü:** Personel **self-kayıtta doğum tarihini** girer (`birth_date`,
+  zorunlu; yalnızca ay/gün kullanılır). Doğum günü bugün olan personelin
+  gün içindeki **ilk girişi** `birthday` bayrağıyla döner; tablet o tarama için
+  yeşil onay yerine tam ekran "İyi ki doğdun!" kutlaması gösterir.
+- `birth_date` alanı modele sonradan eklendiği için, mevcut veritabanlarında
   `users.birth_date` kolonu açılışta otomatik (idempotent) eklenir
   (`ensure_schema_upgrades`).
 

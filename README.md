@@ -21,7 +21,7 @@ imzalı dinamik QR kodları** ile takip eden uçtan uca bir sistem.
 | Klasör              | Teknoloji                         | Görev                                            |
 | ------------------- | --------------------------------- | ------------------------------------------------ |
 | `backend/`          | Python · FastAPI · SQLAlchemy(async) · PostgreSQL · APScheduler | API, dual-token auth, QR üretimi, scan mantığı, cron |
-| `kiosk-app/`        | React · Vite · qrcode.react       | Tam ekran tablet; QR'ı 15 sn'de bir yeniler; doğum günü olan personelin ilk girişinde kutlama gösterir (`?campus=<id>`) |
+| `kiosk-app/`        | React · Vite · qrcode.react       | Tam ekran tablet; QR'ı 15 sn'de bir yeniler; başarılı taramada yeşil "Giriş/Çıkış başarılı" onayı, doğum günü ilk girişinde kutlama gösterir (`?campus=<id>`) |
 | `pwa-mobile-client/`| React · Vite · vite-plugin-pwa · html5-qrcode | Öğretmen PWA'sı: "Ana Ekrana Ekle", doğrudan kamera, sessiz oturum yenileme |
 | `admin-app/`        | React · Vite                      | Müdür/genel merkez paneli: kampüs raporları, personel onayı, cihaz sıfırlama, manuel kayıt, izin/devamsızlık, CSV/Excel, müdür ve mesai saati yönetimi |
 
@@ -90,11 +90,14 @@ Backend için **FastAPI** seçildi: async I/O, otomatik OpenAPI dokümantasyonu
 12. **Mesai saatleri yalnızca genel merkezde:** Her kampüsün mesai
     başlangıç/bitiş saatini sadece **genel merkez** belirler; geç kalma/erken
     çıkış raporları bu saatlere dayanır.
-13. **Doğum günü kutlaması:** Personel kayıtta **doğum tarihini** girer. Doğum
-    günü bugün olan personel gün içindeki **ilk QR girişini** yapınca, ilgili
-    kampüsün tableti tam ekran "İyi ki doğdun!" kutlaması gösterir. Tablet
-    kampüsünü URL'den (`?campus=<id>`) bilir; kutlama yalnızca o kampüsün
-    tabletlerinde çıkar.
+13. **Tablette tarama onayı:** Her başarılı QR taramasından hemen sonra
+    tablette yeşil tikli "Giriş başarılı" / "Çıkış başarılı" + isim bildirimi
+    çıkar (kiosk, kampüsünün son taramalarını yoklar; tablet kampüsünü
+    `?campus=<id>` ile bilir).
+14. **Doğum günü kutlaması:** Personel kayıtta **doğum tarihini** girer. Doğum
+    günü bugün olan personel gün içindeki **ilk girişini** yapınca, ilgili
+    kampüsün tableti yeşil onay yerine tam ekran "İyi ki doğdun!" kutlaması
+    gösterir; kutlama yalnızca o kampüsün tabletlerinde çıkar.
 
 ## Hızlı başlangıç (Docker)
 

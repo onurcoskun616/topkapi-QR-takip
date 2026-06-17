@@ -292,7 +292,7 @@ def test_reports_xlsx_export(client, seeded):
 
 
 # --------------------------------------------------------------------------- #
-# Birthday celebrations (kiosk)
+# Kiosk feed — green-check scan confirmation + birthday celebration
 # --------------------------------------------------------------------------- #
 def _set_birthday_today(client, seeded, headers=None):
     """Move the seeded staff member's birthday to today's month/day."""
@@ -305,6 +305,17 @@ def _set_birthday_today(client, seeded, headers=None):
     )
     assert r.status_code == 200
     return today
+
+
+def _scan(client, seeded):
+    qr_token = client.get("/api/qr/token").json()["token"]
+    return client.post("/api/scan", headers=seeded["staff_headers"], json={"qr_token": qr_token})
+
+
+def _recent_scans(client, campus_id):
+    r = client.get("/api/kiosk/recent-scans", params={"campus_id": campus_id})
+    assert r.status_code == 200
+    return r.json()["scans"]
 
 
 def test_register_requires_birth_date(client, seeded):
@@ -322,46 +333,55 @@ def test_register_requires_birth_date(client, seeded):
     assert r.status_code == 422
 
 
-def test_birthday_celebration_after_first_qr_in(client, seeded):
+def test_recent_scan_confirms_in_then_out(client, seeded):
+    r = _scan(client, seeded)
+    assert r.status_code == 200 and r.json()["type"] == "IN"
+
+    scans = _recent_scans(client, seeded["campus_a"]["id"])
+    assert len(scans) == 1
+    assert scans[0]["full_name"] == "Ayşe Yılmaz"
+    assert scans[0]["type"] == "IN"
+    assert scans[0]["birthday"] is False
+
+    r = _scan(client, seeded)
+    assert r.status_code == 200 and r.json()["type"] == "OUT"
+
+    scans = _recent_scans(client, seeded["campus_a"]["id"])
+    types = {s["type"] for s in scans}
+    assert types == {"IN", "OUT"}
+
+
+def test_recent_scan_flags_birthday_first_in(client, seeded):
     _set_birthday_today(client, seeded)
+    assert _scan(client, seeded).status_code == 200
 
-    qr_token = client.get("/api/qr/token").json()["token"]
-    r = client.post("/api/scan", headers=seeded["staff_headers"], json={"qr_token": qr_token})
-    assert r.status_code == 200
-    assert r.json()["type"] == "IN"
-
-    r = client.get("/api/kiosk/celebrations", params={"campus_id": seeded["campus_a"]["id"]})
-    assert r.status_code == 200
-    celebrations = r.json()["celebrations"]
-    assert len(celebrations) == 1
-    assert celebrations[0]["full_name"] == "Ayşe Yılmaz"
+    scans = _recent_scans(client, seeded["campus_a"]["id"])
+    assert len(scans) == 1
+    assert scans[0]["birthday"] is True
+    assert scans[0]["full_name"] == "Ayşe Yılmaz"
 
 
-def test_no_celebration_when_birthday_not_today(client, seeded):
-    # Seeded birthday is 1990-05-20; unless the suite runs on May 20 there is no
-    # celebration. Force a non-today date to make the test deterministic.
+def test_recent_scan_not_birthday_when_date_differs(client, seeded):
+    # Seeded birthday is 1990-05-20; force a non-today date so the scan is a
+    # plain confirmation, not a celebration.
     today = _today_local()
     other = (today + timedelta(days=1)).replace(year=1990)
-    r = client.patch(
+    client.patch(
         f"/api/staff/{seeded['staff_id']}",
         headers=seeded["dir_a_headers"],
         json={"birth_date": other.isoformat()},
     )
-    assert r.status_code == 200
+    assert _scan(client, seeded).status_code == 200
 
-    qr_token = client.get("/api/qr/token").json()["token"]
-    client.post("/api/scan", headers=seeded["staff_headers"], json={"qr_token": qr_token})
-
-    r = client.get("/api/kiosk/celebrations", params={"campus_id": seeded["campus_a"]["id"]})
-    assert r.status_code == 200
-    assert r.json()["celebrations"] == []
+    scans = _recent_scans(client, seeded["campus_a"]["id"])
+    assert len(scans) == 1
+    assert scans[0]["birthday"] is False
 
 
-def test_manual_in_does_not_trigger_celebration(client, seeded):
+def test_manual_entry_not_in_recent_scans(client, seeded):
     today = _set_birthday_today(client, seeded)
 
-    # A director's manual IN for today should NOT light up the kiosk — nobody
-    # is standing there scanning.
+    # A director's manual IN must NOT appear on the tablet — nobody scanned it.
     r = client.post(
         "/api/logs/manual",
         headers=seeded["dir_a_headers"],
@@ -369,17 +389,11 @@ def test_manual_in_does_not_trigger_celebration(client, seeded):
     )
     assert r.status_code == 201
 
-    r = client.get("/api/kiosk/celebrations", params={"campus_id": seeded["campus_a"]["id"]})
-    assert r.status_code == 200
-    assert r.json()["celebrations"] == []
+    assert _recent_scans(client, seeded["campus_a"]["id"]) == []
 
 
-def test_celebration_scoped_to_campus(client, seeded):
-    _set_birthday_today(client, seeded)
-    qr_token = client.get("/api/qr/token").json()["token"]
-    client.post("/api/scan", headers=seeded["staff_headers"], json={"qr_token": qr_token})
+def test_recent_scans_scoped_to_campus(client, seeded):
+    assert _scan(client, seeded).status_code == 200
 
-    # Querying a different campus must not see campus A's birthday scan.
-    r = client.get("/api/kiosk/celebrations", params={"campus_id": seeded["campus_b"]["id"]})
-    assert r.status_code == 200
-    assert r.json()["celebrations"] == []
+    # A campus B kiosk must not see campus A's scan.
+    assert _recent_scans(client, seeded["campus_b"]["id"]) == []

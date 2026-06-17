@@ -143,12 +143,14 @@ Tabletlerde `https://kiosk.okulunuz.com` adresini tam ekran aç. Cihazı tek
 uygulamaya kilitlemek ve ekranı sürekli açık tutmak için **Fully Kiosk
 Browser** gibi bir uygulama önerilir.
 
-> **Doğum günü kutlaması için kampüs belirt:** Her tableti kendi kampüsünün
-> kimliğiyle aç — `https://kiosk.okulunuz.com/?campus=<KAMPUS_ID>` (kampüs
-> id'leri genel merkez panelindeki **Kampüsler** sekmesinden görülebilir).
-> Doğum günü olan personel o kampüste gün içindeki ilk QR girişini yapınca
-> tablet tam ekran "İyi ki doğdun!" kutlaması gösterir. `?campus=` verilmezse
-> kiosk normal çalışır, yalnızca doğum günü kutlaması devre dışı kalır.
+> **Tableti kampüs kimliğiyle aç:** Her tableti
+> `https://kiosk.okulunuz.com/?campus=<KAMPUS_ID>` adresiyle aç (kampüs id'leri
+> genel merkez panelindeki **Kampüsler** sekmesinden görülebilir). Bu sayede:
+> başarılı her taramadan sonra tablette yeşil **"Giriş/Çıkış başarılı"** onayı
+> çıkar; doğum günü olan personelin gün içindeki ilk girişinde ise tam ekran
+> **"İyi ki doğdun!"** kutlaması gösterilir. `?campus=` verilmezse kiosk QR'ı
+> normal gösterir ama tablette tarama onayı/kutlama çıkmaz (ekranda uyarı
+> belirir).
 
 ---
 

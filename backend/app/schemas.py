@@ -142,20 +142,24 @@ class ScanResponse(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
-# Kiosk birthday celebrations
+# Kiosk feed — tablet confirmation + birthday celebration
 # --------------------------------------------------------------------------- #
-class BirthdayCelebration(BaseModel):
-    """A staff member whose birthday is today and who just scanned their first
-    IN of the day on the kiosk — surfaced so the tablet can celebrate them."""
+class RecentScan(BaseModel):
+    """A recent successful QR scan on a campus, polled by the kiosk so the
+    tablet can confirm it (green "Giriş/Çıkış başarılı"). ``birthday`` marks the
+    staff member's first IN of the day on their birthday, which the tablet
+    celebrates instead of merely confirming."""
 
+    log_id: int
     user_id: int
     full_name: str
-    log_id: int
+    type: AttendanceType
     scan_time: datetime
+    birthday: bool = False
 
 
-class CelebrationsResponse(BaseModel):
-    celebrations: list[BirthdayCelebration]
+class RecentScansResponse(BaseModel):
+    scans: list[RecentScan]
 
 
 # --------------------------------------------------------------------------- #
