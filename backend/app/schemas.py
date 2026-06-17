@@ -108,6 +108,12 @@ class DirectorCreate(BaseModel):
     campus_id: int
 
 
+class DirectorPasswordUpdate(BaseModel):
+    """hq resets a director's password (e.g. they forgot it)."""
+
+    password: str = Field(min_length=8, max_length=128)
+
+
 class StaffBulkRow(BaseModel):
     """One staff member in a bulk import (e.g. start-of-year roster upload).
 

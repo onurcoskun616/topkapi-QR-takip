@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 
@@ -12,6 +12,10 @@ export default function Directors() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [passwordTarget, setPasswordTarget] = useState(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordError, setPasswordError] = useState(null);
+  const [passwordBusy, setPasswordBusy] = useState(false);
 
   const load = () =>
     api.listDirectors(token).then(setDirectors).catch((e) => setError(e.message));
@@ -51,6 +55,42 @@ export default function Directors() {
       await load();
     } catch (e) {
       setError(e.message);
+    }
+  };
+
+  const enable = async (d) => {
+    try {
+      await api.enableDirector(token, d.id);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const openPasswordForm = (d) => {
+    setPasswordTarget(d);
+    setNewPassword("");
+    setPasswordError(null);
+  };
+
+  const closePasswordForm = () => {
+    setPasswordTarget(null);
+    setNewPassword("");
+    setPasswordError(null);
+  };
+
+  const submitPassword = async (e) => {
+    e.preventDefault();
+    setPasswordBusy(true);
+    setPasswordError(null);
+    try {
+      await api.updateDirectorPassword(token, passwordTarget.id, newPassword);
+      setNotice(`${passwordTarget.full_name} için şifre güncellendi.`);
+      closePasswordForm();
+    } catch (err) {
+      setPasswordError(err.message);
+    } finally {
+      setPasswordBusy(false);
     }
   };
 
@@ -113,27 +153,74 @@ export default function Directors() {
             </thead>
             <tbody>
               {directors.map((d) => (
-                <tr key={d.id}>
-                  <td>{d.full_name}</td>
-                  <td className="muted small">{d.email}</td>
-                  <td>{d.campus_name || "—"}</td>
-                  <td>
-                    <span
-                      className={
-                        d.status === "active" ? "badge badge--in" : "badge badge--out"
-                      }
-                    >
-                      {d.status === "active" ? "Aktif" : "Devre dışı"}
-                    </span>
-                  </td>
-                  <td>
-                    {d.status === "active" && (
-                      <button className="btn btn--warn btn--sm" onClick={() => disable(d)}>
-                        Devre Dışı
-                      </button>
-                    )}
-                  </td>
-                </tr>
+                <Fragment key={d.id}>
+                  <tr>
+                    <td>{d.full_name}</td>
+                    <td className="muted small">{d.email}</td>
+                    <td>{d.campus_name || "—"}</td>
+                    <td>
+                      <span
+                        className={
+                          d.status === "active" ? "badge badge--in" : "badge badge--out"
+                        }
+                      >
+                        {d.status === "active" ? "Aktif" : "Devre dışı"}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="actions">
+                        {d.status === "active" ? (
+                          <button className="btn btn--warn btn--sm" onClick={() => disable(d)}>
+                            Devre Dışı
+                          </button>
+                        ) : (
+                          <button className="btn btn--primary btn--sm" onClick={() => enable(d)}>
+                            Aktif Et
+                          </button>
+                        )}
+                        <button className="btn btn--ghost btn--sm" onClick={() => openPasswordForm(d)}>
+                          Şifre Değiştir
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {passwordTarget?.id === d.id && (
+                    <tr className="manual-row">
+                      <td colSpan={5}>
+                        <form className="manual-form" onSubmit={submitPassword}>
+                          <span className="manual-form__title">
+                            <strong>{d.full_name}</strong> için yeni şifre belirle
+                          </span>
+                          <label className="field field--inline">
+                            <span>Yeni şifre (min 8)</span>
+                            <input
+                              type="password"
+                              minLength={8}
+                              required
+                              autoFocus
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                            />
+                          </label>
+                          <div className="actions">
+                            <button className="btn btn--primary btn--sm" disabled={passwordBusy} type="submit">
+                              {passwordBusy ? "Kaydediliyor…" : "Kaydet"}
+                            </button>
+                            <button
+                              className="btn btn--ghost btn--sm"
+                              type="button"
+                              disabled={passwordBusy}
+                              onClick={closePasswordForm}
+                            >
+                              Vazgeç
+                            </button>
+                          </div>
+                          {passwordError && <p className="error">{passwordError}</p>}
+                        </form>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

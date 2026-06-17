@@ -89,6 +89,12 @@ export const api = {
   disableDirector: (token, id) =>
     request(`/api/directors/${id}/disable`, { method: "POST", token }),
 
+  enableDirector: (token, id) =>
+    request(`/api/directors/${id}/enable`, { method: "POST", token }),
+
+  updateDirectorPassword: (token, id, password) =>
+    request(`/api/directors/${id}/password`, { method: "POST", token, body: { password } }),
+
   // --- reporting ----------------------------------------------------------
   todaySummary: (token, { campusId } = {}) =>
     request(`/api/logs/summary/today${qs({ campus_id: campusId })}`, { token }),

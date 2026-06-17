@@ -186,6 +186,74 @@ def test_director_cannot_set_shift_hours(client, seeded):
 
 
 # --------------------------------------------------------------------------- #
+# Directors — hq can disable, re-enable, and reset a director's password
+# --------------------------------------------------------------------------- #
+def _director_id(client, hq_headers, email):
+    directors = client.get("/api/directors", headers=hq_headers).json()
+    return next(d for d in directors if d["email"] == email)["id"]
+
+
+def test_hq_can_reenable_disabled_director(client, seeded):
+    hq_headers = seeded["hq_headers"]
+    director_id = _director_id(client, hq_headers, "director.a@test.com")
+
+    r = client.post(f"/api/directors/{director_id}/disable", headers=hq_headers)
+    assert r.status_code == 200
+    assert r.json()["status"] == "disabled"
+
+    r = client.post(f"/api/directors/{director_id}/enable", headers=hq_headers)
+    assert r.status_code == 200
+    assert r.json()["status"] == "active"
+
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "director.a@test.com", "password": "DirPassword123!", "device_fingerprint": "dir-a-fp-cccc"},
+    )
+    assert r.status_code == 200
+
+
+def test_director_cannot_reenable_director(client, seeded):
+    director_id = _director_id(client, seeded["hq_headers"], "director.b@test.com")
+    r = client.post(f"/api/directors/{director_id}/enable", headers=seeded["dir_a_headers"])
+    assert r.status_code == 403
+
+
+def test_hq_can_reset_director_password(client, seeded):
+    hq_headers = seeded["hq_headers"]
+    director_id = _director_id(client, hq_headers, "director.a@test.com")
+
+    r = client.post(
+        f"/api/directors/{director_id}/password",
+        headers=hq_headers,
+        json={"password": "NewDirPassword456!"},
+    )
+    assert r.status_code == 200
+
+    # Old password no longer works; new one logs in fine.
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "director.a@test.com", "password": "DirPassword123!", "device_fingerprint": "dir-a-fp-dddd"},
+    )
+    assert r.status_code == 401
+
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "director.a@test.com", "password": "NewDirPassword456!", "device_fingerprint": "dir-a-fp-eeee"},
+    )
+    assert r.status_code == 200
+
+
+def test_director_cannot_reset_director_password(client, seeded):
+    director_id = _director_id(client, seeded["hq_headers"], "director.b@test.com")
+    r = client.post(
+        f"/api/directors/{director_id}/password",
+        headers=seeded["dir_a_headers"],
+        json={"password": "NewDirPassword456!"},
+    )
+    assert r.status_code == 403
+
+
+# --------------------------------------------------------------------------- #
 # Reports
 # --------------------------------------------------------------------------- #
 def test_late_ranking_flags_late_arrival(client, seeded):

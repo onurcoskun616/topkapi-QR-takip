@@ -16,6 +16,7 @@ from ..deps import get_current_hq, get_current_manager
 from ..models import Campus, Session, User, UserRole, UserStatus
 from ..schemas import (
     DirectorCreate,
+    DirectorPasswordUpdate,
     StaffBulkCreate,
     StaffBulkResult,
     StaffBulkRowResult,
@@ -324,6 +325,43 @@ async def disable_director(director_id: int, db: AsyncSession = Depends(get_db))
     if director is None or director.role != UserRole.campus_director:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müdür bulunamadı.")
     director.status = UserStatus.disabled
+    await db.execute(delete(Session).where(Session.user_id == director.id))
+    await db.commit()
+    names = await _campus_names(db)
+    return to_user_response(director, campus_name=names.get(director.campus_id))
+
+
+@router.post(
+    "/directors/{director_id}/enable",
+    response_model=UserResponse,
+    dependencies=[Depends(get_current_hq)],
+)
+async def enable_director(director_id: int, db: AsyncSession = Depends(get_db)):
+    """Re-activate a previously disabled director account."""
+    director = await db.get(User, director_id)
+    if director is None or director.role != UserRole.campus_director:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müdür bulunamadı.")
+    director.status = UserStatus.active
+    await db.commit()
+    names = await _campus_names(db)
+    return to_user_response(director, campus_name=names.get(director.campus_id))
+
+
+@router.post(
+    "/directors/{director_id}/password",
+    response_model=UserResponse,
+    dependencies=[Depends(get_current_hq)],
+)
+async def update_director_password(
+    director_id: int,
+    payload: DirectorPasswordUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Reset a director's password and drop their sessions (re-login required)."""
+    director = await db.get(User, director_id)
+    if director is None or director.role != UserRole.campus_director:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müdür bulunamadı.")
+    director.password_hash = hash_password(payload.password)
     await db.execute(delete(Session).where(Session.user_id == director.id))
     await db.commit()
     names = await _campus_names(db)
