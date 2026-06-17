@@ -301,6 +301,10 @@ select:focus {
   background: rgba(255, 200, 61, 0.2);
   color: var(--accent);
 }
+.badge--manual {
+  background: rgba(125, 211, 252, 0.2);
+  color: #7dd3fc;
+}
 
 /* Inline manual-entry / correction forms (Staff, Leaves) */
 .manual-row td {

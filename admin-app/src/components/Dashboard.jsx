@@ -181,6 +181,7 @@ export default function Dashboard({ isHq }) {
                 <th>Personel</th>
                 {isHq && <th>Kampüs</th>}
                 <th>Tür</th>
+                <th>Kaynak</th>
                 <th>Durum</th>
                 <th>Zaman</th>
               </tr>
@@ -188,13 +189,13 @@ export default function Dashboard({ isHq }) {
             <tbody>
               {busy ? (
                 <tr>
-                  <td colSpan={isHq ? 5 : 4} className="muted">
+                  <td colSpan={isHq ? 6 : 5} className="muted">
                     Yükleniyor…
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan={isHq ? 5 : 4} className="muted">
+                  <td colSpan={isHq ? 6 : 5} className="muted">
                     Kayıt bulunamadı.
                   </td>
                 </tr>
@@ -209,6 +210,15 @@ export default function Dashboard({ isHq }) {
                       >
                         {l.type === "IN" ? "GİRİŞ" : "ÇIKIŞ"}
                       </span>
+                    </td>
+                    <td>
+                      {l.source === "director_manual" ? (
+                        <span className="badge badge--manual" title={l.recorded_by_name ? `Giren: ${l.recorded_by_name}` : undefined}>
+                          Müdür girişi
+                        </span>
+                      ) : (
+                        <span className="muted small">QR okuma</span>
+                      )}
                     </td>
                     <td>
                       {l.status === "auto_closed_by_system" ? (
