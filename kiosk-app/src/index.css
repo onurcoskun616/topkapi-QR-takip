@@ -40,6 +40,22 @@ body {
   padding: 4vh;
 }
 
+.kiosk__logo {
+  width: clamp(56px, 8vw, 90px);
+  height: clamp(56px, 8vw, 90px);
+}
+.kiosk__logo-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 4;
+}
+.kiosk__logo-text {
+  fill: var(--accent);
+  font-size: 36px;
+  font-weight: 800;
+  font-family: inherit;
+}
+
 .kiosk__title {
   font-size: clamp(1.5rem, 4vw, 3rem);
   font-weight: 700;
@@ -112,6 +128,14 @@ body {
 
 .status--error {
   color: #ff8a8a;
+}
+
+.kiosk__clock {
+  font-size: clamp(1.3rem, 3vw, 2rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  color: var(--text);
 }
 
 /* ---- Birthday celebration overlay ---- */

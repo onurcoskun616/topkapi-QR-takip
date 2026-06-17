@@ -35,6 +35,7 @@ export default function App() {
   const [ttl, setTtl] = useState(15);
   const [remaining, setRemaining] = useState(15);
   const [error, setError] = useState(null);
+  const [clockText, setClockText] = useState("");
 
   // Offset between the kiosk clock and the server clock (ms). We trust the
   // server: remaining time is computed against server-synced "now".
@@ -94,6 +95,27 @@ export default function App() {
     }, 250);
     return () => clearInterval(interval);
   }, [expiresAt, refresh]);
+
+  // Live wall-clock display (HH:MM:SS), corrected by the same server offset
+  // used for the countdown, so staff can read the exact time of their scan
+  // regardless of the tablet's own clock accuracy. Runs independently of the
+  // QR refresh cycle so it keeps ticking even during an error/retry state.
+  useEffect(() => {
+    const tick = () => {
+      const serverNow = new Date(Date.now() + serverOffsetRef.current);
+      setClockText(
+        serverNow.toLocaleTimeString("tr-TR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        })
+      );
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Show the next queued confirmation if nothing is currently on screen.
   const pump = useCallback(() => {
@@ -178,6 +200,12 @@ export default function App() {
       {current?.kind === "scan" && (
         <ScanResult name={current.name} type={current.type} onDone={dismiss} />
       )}
+      <svg className="kiosk__logo" viewBox="0 0 100 100" aria-hidden="true">
+        <circle className="kiosk__logo-ring" cx="50" cy="50" r="46" />
+        <text className="kiosk__logo-text" x="50" y="62" textAnchor="middle">
+          TO
+        </text>
+      </svg>
       <h1 className="kiosk__title">Topkapı Okulları</h1>
       <p className="kiosk__subtitle">
         Giriş / Çıkış için telefonunuzla QR kodu okutun
@@ -217,6 +245,7 @@ export default function App() {
       ) : (
         <p className="status">Sunucu saati ile senkronize</p>
       )}
+      <p className="kiosk__clock">{clockText}</p>
     </div>
   );
 }
