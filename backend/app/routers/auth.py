@@ -23,13 +23,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..database import get_db
-from ..deps import get_current_user, oauth2_scheme
+from ..deps import get_current_manager, get_current_user, oauth2_scheme
 from ..models import Campus, Session, User, UserRole, UserStatus, ensure_aware
 from ..schemas import (
     AccessTokenResponse,
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
+    SelfPasswordChange,
     TokenResponse,
     UserResponse,
 )
@@ -263,6 +264,21 @@ async def logout(
     except (JWTError, KeyError, ValueError, TypeError):
         return  # nothing to revoke / already invalid
     await db.execute(delete(Session).where(Session.id == session_id))
+    await db.commit()
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    payload: SelfPasswordChange,
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """A manager (director / hq) changes their own password from the panel."""
+    if not verify_password(payload.current_password, manager.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Mevcut şifre hatalı."
+        )
+    manager.password_hash = hash_password(payload.new_password)
     await db.commit()
 
 

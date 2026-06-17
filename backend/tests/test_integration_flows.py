@@ -254,6 +254,48 @@ def test_director_cannot_reset_director_password(client, seeded):
 
 
 # --------------------------------------------------------------------------- #
+# Self-service password change — any logged-in manager (director or hq)
+# --------------------------------------------------------------------------- #
+def test_manager_can_change_own_password(client, seeded):
+    r = client.post(
+        "/api/auth/change-password",
+        headers=seeded["dir_a_headers"],
+        json={"current_password": "DirPassword123!", "new_password": "SelfChanged789!"},
+    )
+    assert r.status_code == 204
+
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "director.a@test.com", "password": "DirPassword123!", "device_fingerprint": "dir-a-fp-ffff"},
+    )
+    assert r.status_code == 401
+
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "director.a@test.com", "password": "SelfChanged789!", "device_fingerprint": "dir-a-fp-gggg"},
+    )
+    assert r.status_code == 200
+
+
+def test_change_password_rejects_wrong_current_password(client, seeded):
+    r = client.post(
+        "/api/auth/change-password",
+        headers=seeded["dir_a_headers"],
+        json={"current_password": "WrongPassword!", "new_password": "SelfChanged789!"},
+    )
+    assert r.status_code == 400
+
+
+def test_staff_cannot_change_password(client, seeded):
+    r = client.post(
+        "/api/auth/change-password",
+        headers=seeded["staff_headers"],
+        json={"current_password": "anything", "new_password": "SelfChanged789!"},
+    )
+    assert r.status_code == 403
+
+
+# --------------------------------------------------------------------------- #
 # Reports
 # --------------------------------------------------------------------------- #
 def test_late_ranking_flags_late_arrival(client, seeded):

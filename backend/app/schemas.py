@@ -114,6 +114,13 @@ class DirectorPasswordUpdate(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class SelfPasswordChange(BaseModel):
+    """A logged-in manager (director or hq) changes their own password."""
+
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class StaffBulkRow(BaseModel):
     """One staff member in a bulk import (e.g. start-of-year roster upload).
 

@@ -54,6 +54,13 @@ export const api = {
 
   me: (token) => request("/api/auth/me", { token }),
 
+  changePassword: (token, currentPassword, newPassword) =>
+    request("/api/auth/change-password", {
+      method: "POST",
+      token,
+      body: { current_password: currentPassword, new_password: newPassword },
+    }),
+
   // --- campuses -----------------------------------------------------------
   campuses: () => request("/api/campuses"),
 

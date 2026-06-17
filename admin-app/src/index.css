@@ -328,6 +328,19 @@ select:focus {
   min-width: 180px;
 }
 
+/* ---- Modal overlay (e.g. self password change) ---- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 12, 24, 0.6);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+}
+.modal-backdrop .card {
+  width: min(360px, 90vw);
+}
+
 /* ---- Attention banners (Dashboard) ---- */
 .banner {
   border-radius: 12px;
