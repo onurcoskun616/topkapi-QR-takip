@@ -2,6 +2,18 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 
+// Build this campus' kiosk (tablet) URL from the panel's own address, e.g.
+// panel.okul.com -> kiosk.okul.com/?campus=3. The deployment uses matching
+// panel./kiosk. subdomains, so swapping the first label is reliable here.
+function kioskUrl(campusId) {
+  const { protocol, hostname, port } = window.location;
+  const kioskHost = hostname.includes(".")
+    ? hostname.replace(/^[^.]+/, "kiosk")
+    : hostname; // dev (localhost) — no subdomain to swap
+  const portPart = port ? `:${port}` : "";
+  return `${protocol}//${kioskHost}${portPart}/?campus=${campusId}`;
+}
+
 export default function Campuses() {
   const { token } = useAuth();
   const [campuses, setCampuses] = useState([]);
@@ -9,6 +21,7 @@ export default function Campuses() {
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
 
   const load = () => api.campuses().then(setCampuses).catch((e) => setError(e.message));
 
@@ -16,6 +29,17 @@ export default function Campuses() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const copyKioskUrl = async (c) => {
+    const url = kioskUrl(c.id);
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      /* clipboard blocked (e.g. http) — the address is still shown to copy by hand */
+    }
+    setCopiedId(c.id);
+    setTimeout(() => setCopiedId((id) => (id === c.id ? null : id)), 2000);
+  };
 
   const fieldFor = (c) =>
     edits[c.id] || {
@@ -57,6 +81,12 @@ export default function Campuses() {
           Mesai saatlerini yalnızca genel merkez belirleyebilir. Bu saatler, geç kalma ve erken
           çıkış raporlarının dayanağıdır.
         </p>
+        <p className="muted small">
+          <strong>Tablet (kiosk) kurulumu:</strong> Her kampüsün tabletinde aşağıdaki <em>Kiosk
+          Adresi</em>ni açın. Adresteki <code>?campus=ID</code> sayesinde o tablette başarılı her
+          taramada yeşil onay ve doğum günü kutlaması görünür. Adres olmadan QR yine döner ama
+          tablette onay çıkmaz.
+        </p>
 
         {error && <p className="error">{error}</p>}
         {notice && <p className="notice">{notice}</p>}
@@ -65,9 +95,11 @@ export default function Campuses() {
           <table className="table">
             <thead>
               <tr>
+                <th>ID</th>
                 <th>Kampüs</th>
                 <th>Mesai Başlangıç</th>
                 <th>Mesai Bitiş</th>
+                <th>Kiosk Adresi</th>
                 <th>İşlem</th>
               </tr>
             </thead>
@@ -76,6 +108,7 @@ export default function Campuses() {
                 const f = fieldFor(c);
                 return (
                   <tr key={c.id}>
+                    <td><strong>{c.id}</strong></td>
                     <td>{c.name}</td>
                     <td>
                       <input
@@ -90,6 +123,17 @@ export default function Campuses() {
                         value={f.shift_end}
                         onChange={(e) => setField(c, "shift_end", e.target.value)}
                       />
+                    </td>
+                    <td>
+                      <div className="kiosk-url">
+                        <code className="kiosk-url__text">{kioskUrl(c.id)}</code>
+                        <button
+                          className="btn btn--ghost btn--sm"
+                          onClick={() => copyKioskUrl(c)}
+                        >
+                          {copiedId === c.id ? "Kopyalandı ✓" : "Kopyala"}
+                        </button>
+                      </div>
                     </td>
                     <td>
                       <button

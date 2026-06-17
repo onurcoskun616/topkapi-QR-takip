@@ -282,6 +282,17 @@ select:focus {
   color: var(--muted);
   font-weight: 600;
 }
+.kiosk-url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kiosk-url__text {
+  font-size: 0.8rem;
+  color: var(--accent);
+  word-break: break-all;
+}
 .badge {
   display: inline-block;
   padding: 2px 10px;
