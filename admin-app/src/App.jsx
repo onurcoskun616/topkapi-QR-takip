@@ -4,6 +4,7 @@ import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
 import Staff from "./components/Staff";
 import Leaves from "./components/Leaves";
+import Holidays from "./components/Holidays";
 import Reports from "./components/Reports";
 import Directors from "./components/Directors";
 import Campuses from "./components/Campuses";
@@ -49,6 +50,12 @@ export default function App() {
             İzin / Devamsızlık
           </button>
           <button
+            className={tab === "holidays" ? "tab tab--active" : "tab"}
+            onClick={() => setTab("holidays")}
+          >
+            Tatiller
+          </button>
+          <button
             className={tab === "reports" ? "tab tab--active" : "tab"}
             onClick={() => setTab("reports")}
           >
@@ -84,6 +91,7 @@ export default function App() {
         {tab === "dashboard" && <Dashboard isHq={isHq} />}
         {tab === "staff" && <Staff isHq={isHq} />}
         {tab === "leaves" && <Leaves isHq={isHq} />}
+        {tab === "holidays" && <Holidays isHq={isHq} />}
         {tab === "reports" && <Reports isHq={isHq} />}
         {tab === "directors" && isHq && <Directors />}
         {tab === "campuses" && isHq && <Campuses />}

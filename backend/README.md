@@ -35,9 +35,9 @@ uvicorn app.main:app --reload --port 8000
 
 | Rol               | Giriş            | Kapsam                                            |
 | ----------------- | ---------------- | ------------------------------------------------ |
-| `staff`           | Şifresiz, cihaz-bağlı (PWA self-kayıt) | QR okutur, kendi geçmişini görür  |
-| `campus_director` | E-posta + şifre  | Kendi kampüsü: personel onay/sıfırlama + raporlar |
-| `hq` (genel merkez) | E-posta + şifre | Tüm kampüsler + müdür/kampüs yönetimi            |
+| `staff`           | Şifresiz, cihaz-bağlı (PWA self-kayıt) | QR okutur, kendi geçmişini görür, **izin talebi** gönderir |
+| `campus_director` | E-posta + şifre  | Kendi kampüsü: personel onay/sıfırlama, izin talebi onay/red, çalışma günü + tatil yönetimi, raporlar |
+| `hq` (genel merkez) | E-posta + şifre | Tüm kampüsler + müdür/kampüs yönetimi + ulusal tatiller |
 
 ## API uç noktaları
 
@@ -53,7 +53,7 @@ uvicorn app.main:app --reload --port 8000
 | POST   | `/api/staff/{id}/approve`    | yönetici  | Bekleyen personeli onayla                         |
 | POST   | `/api/staff/{id}/reset-device` | yönetici | Cihaz kaydını sıfırla (telefon değişikliği)      |
 | POST   | `/api/staff/{id}/disable`    | yönetici  | Personeli devre dışı bırak                        |
-| PATCH  | `/api/staff/{id}`            | yönetici  | Profil düzelt (ad/görev/branş/kampüs)             |
+| PATCH  | `/api/staff/{id}`            | yönetici  | Profil düzelt (ad/görev/branş/kampüs/**çalışma günleri**) |
 | GET    | `/api/directors`             | hq        | Kampüs müdürlerini listele                        |
 | POST   | `/api/directors`             | hq        | Yeni kampüs müdürü oluştur                        |
 | POST   | `/api/directors/{id}/disable`| hq        | Müdür hesabını devre dışı bırak                   |
@@ -66,15 +66,23 @@ uvicorn app.main:app --reload --port 8000
 | GET    | `/api/logs/export`           | yönetici  | CSV dışa aktarım (UTC + yerel saat + kampüs, tarih aralığı filtreli) |
 | GET    | `/api/logs/export.xlsx`      | yönetici  | Aynı ham kayıtların Excel (.xlsx) dışa aktarımı   |
 | GET    | `/api/logs/summary/today`    | yönetici  | Şu an içeride olanlar + günlük sayılar (kampüs kapsamlı) |
-| GET    | `/api/leaves/types`          | yönetici  | Önerilen izin/devamsızlık türleri (açık liste — serbest metin de girilebilir) |
-| GET    | `/api/leaves`                | yönetici  | İzin/devamsızlık kayıtlarını listele (personel/kampüs/durum/tarih filtreli) |
-| POST   | `/api/leaves`                | yönetici  | Personel için tarih aralığı kapsayan izin/devamsızlık kaydı oluştur (aktifken QR okutmayı engeller) |
+| GET    | `/api/leaves/types`          | —         | Önerilen izin/devamsızlık türleri (açık liste — serbest metin de girilebilir; PWA + panel) |
+| GET    | `/api/leaves/me`             | staff     | Personelin kendi izin kayıtları/talepleri (tüm durumlar) |
+| POST   | `/api/leaves/requests`       | staff     | Personel kendi izin talebini gönderir (tür + tarih aralığı) → `requested` (müdür onayına kadar QR okutmayı engellemez) |
+| GET    | `/api/leaves`                | yönetici  | İzin/devamsızlık kayıtlarını listele (personel/kampüs/durum/tarih filtreli; talepler `status=requested`) |
+| POST   | `/api/leaves`                | yönetici  | Personel için tarih aralığı kapsayan izin/devamsızlık kaydı oluştur (doğrudan `active` — QR okutmayı engeller) |
 | PATCH  | `/api/leaves/{id}`           | yönetici  | İzin kaydını düzelt (tür/tarih aralığı/not/durum)  |
+| POST   | `/api/leaves/{id}/approve`   | yönetici  | Personel talebini onayla → `active` (tarih aralığında QR okutmayı engeller) |
+| POST   | `/api/leaves/{id}/reject`    | yönetici  | Personel talebini reddet → `rejected` (hiçbir şeyi engellemez) |
 | POST   | `/api/leaves/{id}/cancel`    | yönetici  | İzin kaydını iptal et (personel anında yeniden QR okutabilir) |
-| GET    | `/api/reports/late`          | yönetici  | En çok geç kalanlar sıralaması (tolerans dakikası + kampüs mesai saatine göre) |
+| GET    | `/api/holidays`              | yönetici  | Resmi tatil/kampüs kapanışlarını listele (müdür: ulusal + kendi kampüsü; hq: tümü) |
+| POST   | `/api/holidays`              | yönetici  | Tatil ekle (müdür: kendi kampüsü; hq: `campus_id` boşsa ulusal/tüm kampüsler) |
+| DELETE | `/api/holidays/{id}`         | yönetici  | Tatil sil (müdür yalnızca kendi kampüs kapanışını; ulusal tatili yalnızca hq) |
+| GET    | `/api/reports/late`          | yönetici  | En çok geç kalanlar sıralaması (kampüs mesai saati + çalışma günleri + tatiller dikkate alınır) |
 | GET    | `/api/reports/early-leave`   | yönetici  | En çok erken çıkanlar sıralaması                  |
-| GET    | `/api/reports/absences`      | yönetici  | Devamsızlık günü detayı (izinle açıklanan / `unresolved` — açıklanmayan) |
+| GET    | `/api/reports/absences`      | yönetici  | Devamsızlık günü detayı (yalnızca beklenen çalışma günleri; izinle açıklanan / `unresolved`) |
 | GET    | `/api/reports/absence-summary` | yönetici | İzin türüne göre toplam + personel başına devamsızlık özeti |
+| GET    | `/api/reports/unresolved-reminder` | yönetici | Son N gün (dün biten pencere) içinde **durum girilmemiş** devamsızlık günleri — müdür hatırlatması |
 | GET    | `/api/reports/export.xlsx`   | yönetici  | Yukarıdaki rapor tablolarının tamamını Excel'e aktar |
 | PATCH  | `/api/campuses/{id}/shift`   | **hq**    | Kampüsün mesai başlangıç/bitiş saatini belirle (yalnızca genel merkez; müdürün yetkisi yok) |
 | POST   | `/api/admin/run-auto-close`  | hq        | Gece kapanışını elle tetikle                      |
@@ -121,9 +129,33 @@ onay** ve **doğum günü kutlaması** gösterir.
   scan'i **anında** yeniden açar. İzinle açıklanmayan devamsız günler
   raporlarda **hiçbir zaman sessizce atlanmaz**; `unresolved` (durum
   girilmedi) olarak işaretlenir.
+- **Personel izin talebi** (`POST /api/leaves/requests`): Personel kendi
+  telefonundan (PWA) izin türünü (Ücretli/Ücretsiz izin, Sağlık raporu, …) ve
+  tarih aralığını seçerek talep gönderir. Talep `requested` durumunda gelir ve
+  **onaylanana kadar QR okutmayı engellemez**. Kampüs müdürü
+  `approve` (→ `active`, aralıkta scan engellenir) veya `reject` (→ `rejected`,
+  hiçbir şeyi engellemez) der. Personel `GET /api/leaves/me` ile kendi
+  taleplerinin durumunu görür. Bir talebin self-servis olduğu
+  `self_requested=true` ile işaretlenir (kayıt `created_by_id == user_id`).
+- **Kişiye özel çalışma günleri** (`User.working_days`): Dönüşümlü çalışan
+  personel için yönetici, `PATCH /api/staff/{id}` ile ISO hafta günü listesi
+  (`[1..7]`, 1=Pzt … 7=Paz) tanımlar. Boş liste/`null` gönderilince varsayılan
+  **Pzt–Cum** haftasına döner. Devamsızlık ve geç/erken raporları yalnızca o
+  personelin **beklenen çalışma günlerini** sayar.
+- **Resmi tatil / kampüs kapanışı** (`Holiday`): `campus_id` boş (NULL) olan
+  tatil **tüm kampüsler** için (ulusal/resmi), dolu olan tek kampüs için
+  geçerlidir. Tatil günü devamsızlık sayımından otomatik düşülür (o gün için
+  kimseden giriş beklenmez; `unresolved` da olmaz). Müdür kendi kampüsünün
+  kapanışlarını yönetir; ulusal tatilleri yalnızca hq ekler/siler.
+- **"Durum girilmedi" hatırlatması** (`GET /api/reports/unresolved-reminder`):
+  Dünden geriye doğru `days` günlük pencerede durumu girilmemiş devamsızlık
+  günlerini döndürür (bugün henüz bitmediği için dahil edilmez). Panelin
+  gösterge ekranında müdüre uyarı bandı olarak gösterilir.
 - **Raporlama**: Tüm rapor uç noktaları (`/api/reports/*`) keyfi
   `start_date`/`end_date` aralığı, `threshold_minutes` (geç kalma/erken çıkma
-  toleransı) ve `exclude_weekends` filtreleri kabul eder; hq ayrıca
+  toleransı) ve `exclude_weekends` filtreleri kabul eder; `exclude_weekends`
+  yalnızca **çalışma günü tanımlı olmayan** personel için varsayılan haftayı
+  belirler (tanımlıysa kişinin kendi günleri esas alınır). hq ayrıca
   `campus_id` ile tek kampüse indirgeyebilir. Hem ham kayıtlar
   (`/api/logs/export.xlsx`) hem de rapor tabloları
   (`/api/reports/export.xlsx`) Excel olarak indirilebilir.
@@ -131,6 +163,10 @@ onay** ve **doğum günü kutlaması** gösterir.
   çıkış hesaplamalarının dayanağıdır; yalnızca **hq** bu saatleri
   değiştirebilir (`PATCH /api/campuses/{id}/shift`) — kampüs müdürünün bu uç
   noktaya erişimi yoktur (403).
+- **Şema yükseltmeleri**: `working_days`, `decided_by_id`, `decided_at`
+  kolonları ve `leave_status` enum'una eklenen `requested`/`rejected` değerleri
+  mevcut veritabanlarında açılışta otomatik (idempotent) eklenir
+  (`ensure_schema_upgrades`; Postgres için `ALTER TYPE … ADD VALUE`).
 
 ## Cron / arka plan görevleri (APScheduler)
 

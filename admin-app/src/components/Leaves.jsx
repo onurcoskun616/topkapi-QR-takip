@@ -2,7 +2,19 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 
-const STATUS_LABEL = { active: "Aktif", cancelled: "İptal edildi" };
+const STATUS_LABEL = {
+  requested: "Talep (onay bekliyor)",
+  active: "Aktif",
+  rejected: "Reddedildi",
+  cancelled: "İptal edildi",
+};
+
+const STATUS_BADGE = {
+  requested: "badge badge--auto",
+  active: "badge badge--in",
+  rejected: "badge badge--out",
+  cancelled: "badge badge--out",
+};
 
 const EMPTY_FORM = { user_id: "", leave_type: "", start_date: "", end_date: "", note: "" };
 
@@ -124,6 +136,30 @@ export default function Leaves({ isHq }) {
     }
   };
 
+  const approveLeave = async (lv) => {
+    setError(null);
+    try {
+      await api.approveLeave(token, lv.id);
+      setNotice(`${lv.user_full_name} için '${lv.leave_type}' talebi onaylandı.`);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const rejectLeave = async (lv) => {
+    if (!window.confirm(`${lv.user_full_name} için '${lv.leave_type}' talebi reddedilsin mi?`))
+      return;
+    setError(null);
+    try {
+      await api.rejectLeave(token, lv.id);
+      setNotice("Talep reddedildi.");
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
     <div className="stack two-col">
       <section className="card">
@@ -205,7 +241,9 @@ export default function Leaves({ isHq }) {
             <span>Durum</span>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               <option value="">Tümü</option>
+              <option value="requested">Talepler (onay bekleyen)</option>
               <option value="active">Aktif</option>
+              <option value="rejected">Reddedildi</option>
               <option value="cancelled">İptal edildi</option>
             </select>
           </label>
@@ -242,14 +280,30 @@ export default function Leaves({ isHq }) {
                         {lv.start_date} → {lv.end_date}
                       </td>
                       <td>
-                        <span
-                          className={lv.status === "active" ? "badge badge--in" : "badge badge--out"}
-                        >
-                          {STATUS_LABEL[lv.status]}
+                        <span className={STATUS_BADGE[lv.status] || "badge badge--out"}>
+                          {STATUS_LABEL[lv.status] || lv.status}
                         </span>
+                        {lv.self_requested && (
+                          <span className="muted small" style={{ display: "block" }}>
+                            personel talebi
+                          </span>
+                        )}
                       </td>
                       <td className="muted small">{lv.created_by_name || "—"}</td>
                       <td className="actions">
+                        {lv.status === "requested" && (
+                          <>
+                            <button
+                              className="btn btn--primary btn--sm"
+                              onClick={() => approveLeave(lv)}
+                            >
+                              Onayla
+                            </button>
+                            <button className="btn btn--warn btn--sm" onClick={() => rejectLeave(lv)}>
+                              Reddet
+                            </button>
+                          </>
+                        )}
                         {lv.status === "active" && (
                           <>
                             <button

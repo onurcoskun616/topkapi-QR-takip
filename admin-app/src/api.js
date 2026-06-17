@@ -133,6 +133,36 @@ export const api = {
   cancelLeave: (token, id) =>
     request(`/api/leaves/${id}/cancel`, { method: "POST", token }),
 
+  approveLeave: (token, id) =>
+    request(`/api/leaves/${id}/approve`, { method: "POST", token }),
+
+  rejectLeave: (token, id) =>
+    request(`/api/leaves/${id}/reject`, { method: "POST", token }),
+
+  // --- holidays / campus closures ----------------------------------------
+  listHolidays: (token, { campusId, startDate, endDate } = {}) =>
+    request(
+      `/api/holidays${qs({ campus_id: campusId, start_date: startDate, end_date: endDate })}`,
+      { token }
+    ),
+
+  createHoliday: (token, payload) =>
+    request("/api/holidays", { method: "POST", token, body: payload }),
+
+  deleteHoliday: (token, id) =>
+    request(`/api/holidays/${id}`, { method: "DELETE", token }),
+
+  // --- unresolved-status reminder (durum girilmedi) ----------------------
+  unresolvedReminder: (token, { campusId, days, excludeWeekends } = {}) =>
+    request(
+      `/api/reports/unresolved-reminder${qs({
+        campus_id: campusId,
+        days,
+        exclude_weekends: excludeWeekends,
+      })}`,
+      { token }
+    ),
+
   // --- reports: late/early-leave rankings, absence detail + summary -------
   lateRanking: (token, { startDate, endDate, campusId, thresholdMinutes, excludeWeekends } = {}) =>
     request(

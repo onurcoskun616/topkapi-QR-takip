@@ -25,6 +25,7 @@ from ..models import (
     AttendanceLog,
     AttendanceType,
     Campus,
+    Holiday,
     LeaveRecord,
     LeaveStatus,
     User,
@@ -38,8 +39,10 @@ from ..schemas import (
     AbsenceTotalEntry,
     EarlyLeaveRankingEntry,
     LateRankingEntry,
+    UnresolvedReminderResponse,
 )
 from ..scoping import scope_campus_id
+from ..services import effective_working_days
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -62,6 +65,47 @@ def _day_range(start_date: date, end_date: date, exclude_weekends: bool):
         if not (exclude_weekends and d.weekday() >= 5):
             yield d
         d += timedelta(days=1)
+
+
+def _all_days(start_date: date, end_date: date) -> list[date]:
+    out: list[date] = []
+    d = start_date
+    while d <= end_date:
+        out.append(d)
+        d += timedelta(days=1)
+    return out
+
+
+async def _load_holidays(
+    db: AsyncSession, start_date: date, end_date: date
+) -> tuple[set[date], dict[int, set[date]]]:
+    """Holidays overlapping the range, split into national (all-campus) dates
+    and a per-campus map of campus-scoped closure dates."""
+    rows = await db.execute(
+        select(Holiday).where(Holiday.date >= start_date, Holiday.date <= end_date)
+    )
+    national: set[date] = set()
+    by_campus: dict[int, set[date]] = defaultdict(set)
+    for h in rows.scalars().all():
+        if h.campus_id is None:
+            national.add(h.date)
+        else:
+            by_campus[h.campus_id].add(h.date)
+    return national, by_campus
+
+
+def _expected_days_for_staff(
+    staff: User,
+    all_days: list[date],
+    exclude_weekends: bool,
+    national_holidays: set[date],
+    holidays_by_campus: dict[int, set[date]],
+) -> list[date]:
+    """The days in the range a staff member is actually expected to work:
+    their per-person working weekdays, minus any applicable holiday."""
+    working = effective_working_days(staff.working_days, exclude_weekends)
+    closed = national_holidays | holidays_by_campus.get(staff.campus_id, set())
+    return [d for d in all_days if d.isoweekday() in working and d not in closed]
 
 
 async def _scoped_active_staff(
@@ -146,6 +190,8 @@ async def late_ranking(
     logs = await _logs_for_staff(db, [s.id for s in staff], start_date, end_date)
     grouped = _group_by_staff_day(logs, tz)
     campuses = await _campus_shift_map(db)
+    national_holidays, holidays_by_campus = await _load_holidays(db, start_date, end_date)
+    all_days = _all_days(start_date, end_date)
 
     results: list[LateRankingEntry] = []
     for s in staff:
@@ -153,7 +199,9 @@ async def late_ranking(
         if campus is None or campus.shift_start is None:
             continue  # no shift configured for this campus — cannot judge lateness
         late_minutes: list[float] = []
-        for d in _day_range(start_date, end_date, exclude_weekends):
+        for d in _expected_days_for_staff(
+            s, all_days, exclude_weekends, national_holidays, holidays_by_campus
+        ):
             bucket = grouped.get((s.id, d))
             if bucket is None or bucket.first_in is None:
                 continue
@@ -199,6 +247,8 @@ async def early_leave_ranking(
     logs = await _logs_for_staff(db, [s.id for s in staff], start_date, end_date)
     grouped = _group_by_staff_day(logs, tz)
     campuses = await _campus_shift_map(db)
+    national_holidays, holidays_by_campus = await _load_holidays(db, start_date, end_date)
+    all_days = _all_days(start_date, end_date)
 
     results: list[EarlyLeaveRankingEntry] = []
     for s in staff:
@@ -206,7 +256,9 @@ async def early_leave_ranking(
         if campus is None or campus.shift_end is None:
             continue
         early_minutes: list[float] = []
-        for d in _day_range(start_date, end_date, exclude_weekends):
+        for d in _expected_days_for_staff(
+            s, all_days, exclude_weekends, national_holidays, holidays_by_campus
+        ):
             bucket = grouped.get((s.id, d))
             if bucket is None or bucket.last_out is None:
                 continue
@@ -244,8 +296,8 @@ async def _compute_absences(
     if not staff:
         return []
 
-    days = list(_day_range(start_date, end_date, exclude_weekends))
-    if len(staff) * max(len(days), 1) > 8000:
+    all_days = _all_days(start_date, end_date)
+    if len(staff) * max(len(all_days), 1) > 8000:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Sonuç kümesi çok büyük; tarih aralığını veya kampüs/personel filtresini daraltın.",
@@ -266,12 +318,17 @@ async def _compute_absences(
     for leave in leave_rows.scalars().all():
         leaves_by_staff[leave.user_id].append(leave)
 
+    national_holidays, holidays_by_campus = await _load_holidays(db, start_date, end_date)
     names = await _campus_names_map(db)
 
     entries: list[AbsenceDayEntry] = []
     for s in staff:
         staff_leaves = leaves_by_staff.get(s.id, [])
-        for d in days:
+        # Only count days this staff member is actually expected to work
+        # (their per-person schedule, minus holidays/closures).
+        for d in _expected_days_for_staff(
+            s, all_days, exclude_weekends, national_holidays, holidays_by_campus
+        ):
             if (s.id, d) in present_days:
                 continue
             covering = next((lv for lv in staff_leaves if lv.start_date <= d <= lv.end_date), None)
@@ -359,6 +416,39 @@ async def absence_summary(
         by_reason=by_reason,
         totals_by_staff=totals,
         unresolved_count=unresolved_count,
+    )
+
+
+@router.get("/unresolved-reminder", response_model=UnresolvedReminderResponse)
+async def unresolved_reminder(
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+    campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    days: int = Query(14, ge=1, le=90, description="Trailing window length (ending yesterday)"),
+    exclude_weekends: bool = True,
+):
+    """Absence days in the trailing window that still have no status entered —
+    surfaced so a manager is reminded to resolve them (mark a leave or correct
+    the record) instead of letting an unexplained gap slip by unnoticed.
+
+    The window ends *yesterday* (local): today is still in progress, so its
+    missing scans are not yet a real absence."""
+    tz = ZoneInfo(settings.attendance_timezone)
+    today_local = datetime.now(timezone.utc).astimezone(tz).date()
+    end_date = today_local - timedelta(days=1)
+    start_date = end_date - timedelta(days=days - 1)
+    if end_date < start_date:  # days == 0 guard (already bounded ≥1)
+        start_date = end_date
+
+    entries = await _compute_absences(
+        db, manager, start_date, end_date, campus_id, None, exclude_weekends
+    )
+    unresolved = [e for e in entries if e.status == "unresolved"]
+    return UnresolvedReminderResponse(
+        start_date=start_date,
+        end_date=end_date,
+        unresolved_count=len(unresolved),
+        entries=unresolved,
     )
 
 

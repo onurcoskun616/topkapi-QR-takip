@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { useAuth } from "../auth";
+import LeaveRequest from "./LeaveRequest";
 
 const READER_ID = "qr-reader";
 
 export default function Scanner() {
   const { user, logout, scan } = useAuth();
+  const [mode, setMode] = useState("scan"); // scan | leave
   const [phase, setPhase] = useState("scanning"); // scanning | processing | result
   const [result, setResult] = useState(null); // { kind, message }
   const [cameraError, setCameraError] = useState(null);
@@ -50,9 +52,10 @@ export default function Scanner() {
     [scan, stopScanner]
   );
 
-  // Start the camera whenever we (re)enter the scanning phase.
+  // Start the camera whenever we (re)enter the scanning phase — but not while
+  // the leave-request view is open (the camera must release then).
   useEffect(() => {
-    if (phase !== "scanning") return;
+    if (mode !== "scan" || phase !== "scanning") return;
     let cancelled = false;
     lockRef.current = false;
     setCameraError(null);
@@ -79,20 +82,41 @@ export default function Scanner() {
       cancelled = true;
       stopScanner();
     };
-  }, [phase, handleDecoded, stopScanner]);
+  }, [mode, phase, handleDecoded, stopScanner]);
 
   const scanAgain = () => {
     setResult(null);
     setPhase("scanning");
   };
 
+  // Open the leave-request view: stop the camera first, then switch.
+  const openLeave = async () => {
+    await stopScanner();
+    setResult(null);
+    setMode("leave");
+  };
+
+  const backToScan = () => {
+    setMode("scan");
+    setPhase("scanning");
+  };
+
+  if (mode === "leave") {
+    return <LeaveRequest onBack={backToScan} />;
+  }
+
   return (
     <div className="screen scanner">
       <header className="scanner__header">
         <span className="scanner__name">{user?.full_name}</span>
-        <button className="link" onClick={logout}>
-          Çıkış
-        </button>
+        <div className="scanner__header-actions">
+          <button className="link" onClick={openLeave}>
+            İzin Talebi
+          </button>
+          <button className="link" onClick={logout}>
+            Çıkış
+          </button>
+        </div>
       </header>
 
       {/* Camera viewport (html5-qrcode injects the video here) */}

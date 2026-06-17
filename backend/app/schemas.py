@@ -89,6 +89,9 @@ class UserResponse(BaseModel):
     job_title: str | None = None
     branch: str | None = None
     birth_date: date | None = None
+    # Per-person working days as ISO weekday numbers (1=Mon … 7=Sun). ``None``
+    # means "not configured" (the standard Mon–Fri week applies in reports).
+    working_days: list[int] | None = None
     campus_id: int | None = None
     campus_name: str | None = None
     has_device: bool = False
@@ -106,13 +109,28 @@ class DirectorCreate(BaseModel):
 
 
 class StaffUpdate(BaseModel):
-    """Optional manager correction of a staff profile (e.g. wrong campus)."""
+    """Optional manager correction of a staff profile (e.g. wrong campus).
+
+    ``working_days`` is treated specially: omit it to leave the schedule
+    untouched, send ``[]`` or ``null`` to clear it back to the default Mon–Fri
+    week, or send a list of ISO weekday numbers (1=Mon … 7=Sun) to set a custom
+    rotational schedule. Presence is detected via ``model_fields_set``.
+    """
 
     full_name: str | None = Field(default=None, min_length=2, max_length=120)
     job_title: str | None = Field(default=None, min_length=2, max_length=80)
     branch: str | None = Field(default=None, min_length=1, max_length=80)
     birth_date: date | None = None
+    working_days: list[int] | None = Field(default=None)
     campus_id: int | None = None
+
+    @model_validator(mode="after")
+    def _check_working_days(self):
+        if self.working_days:
+            for d in self.working_days:
+                if not 1 <= d <= 7:
+                    raise ValueError("working_days 1–7 (Pzt–Paz) aralığında olmalı.")
+        return self
 
 
 # --------------------------------------------------------------------------- #
@@ -212,6 +230,24 @@ class LeaveRecordCreate(BaseModel):
         return self
 
 
+class StaffLeaveRequestCreate(BaseModel):
+    """A staff member's own leave request from the PWA. They pick the leave
+    *kind* (Ücretli/Ücretsiz izin, Sağlık raporu, …) and a date range; it lands
+    as ``requested`` for their campus director to approve or reject. It does not
+    block scanning until a manager approves it."""
+
+    leave_type: str = Field(min_length=2, max_length=80)
+    start_date: date
+    end_date: date
+    note: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def _check_range(self):
+        if self.end_date < self.start_date:
+            raise ValueError("end_date, start_date'den önce olamaz.")
+        return self
+
+
 class LeaveRecordUpdate(BaseModel):
     """Correct a leave record — e.g. shorten the range because the staff
     member actually showed up, or fix the wrong reason/type."""
@@ -235,12 +271,39 @@ class LeaveRecordResponse(BaseModel):
     end_date: date
     note: str | None = None
     status: LeaveStatus
+    # True when the staff member opened this themselves from the PWA (a request
+    # awaiting/decided by a manager), as opposed to a director-created record.
+    self_requested: bool = False
     created_by_name: str | None = None
+    decided_by_name: str | None = None
+    decided_at: datetime | None = None
     created_at: datetime
 
 
 class LeaveTypesResponse(BaseModel):
     suggested: list[str]
+
+
+# --------------------------------------------------------------------------- #
+# Holidays / official closures
+# --------------------------------------------------------------------------- #
+class HolidayCreate(BaseModel):
+    date: date
+    name: str = Field(min_length=2, max_length=120)
+    # None == applies to all campuses (national holiday). hq may target one
+    # campus; a director is always pinned to their own campus by the router.
+    campus_id: int | None = None
+
+
+class HolidayResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    date: date
+    name: str
+    campus_id: int | None = None
+    campus_name: str | None = None
+    created_at: datetime
 
 
 # --------------------------------------------------------------------------- #
@@ -296,6 +359,17 @@ class AbsenceSummaryResponse(BaseModel):
     by_reason: list[AbsenceReasonStat]
     totals_by_staff: list[AbsenceTotalEntry]
     unresolved_count: int
+
+
+class UnresolvedReminderResponse(BaseModel):
+    """Recent absence days still missing a status (durum girilmedi) — the
+    manager's "you have things to resolve" reminder, over a trailing window
+    ending yesterday (today isn't over yet)."""
+
+    start_date: date
+    end_date: date
+    unresolved_count: int
+    entries: list[AbsenceDayEntry]
 
 
 # --------------------------------------------------------------------------- #

@@ -327,3 +327,49 @@ select:focus {
   flex: 1;
   min-width: 180px;
 }
+
+/* ---- Attention banners (Dashboard) ---- */
+.banner {
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  border: 1px solid var(--line);
+}
+.banner--warn {
+  background: rgba(255, 200, 61, 0.12);
+  border-color: rgba(255, 200, 61, 0.4);
+  color: #ffe08a;
+}
+.banner--info {
+  background: rgba(125, 211, 252, 0.12);
+  border-color: rgba(125, 211, 252, 0.4);
+  color: #bfe6fb;
+}
+
+/* ---- Weekday picker (per-person working days) ---- */
+.weekday-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.weekday {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+  background: var(--panel-2);
+}
+.weekday--on {
+  border-color: var(--accent);
+  background: rgba(255, 200, 61, 0.15);
+  color: var(--accent);
+}
+.weekday input {
+  margin: 0;
+}

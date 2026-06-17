@@ -56,6 +56,25 @@ export const api = {
       },
       body: JSON.stringify({ qr_token: qrToken }),
     }).then(parse),
+
+  // Suggested leave/absence kinds (Ücretli/Ücretsiz izin, …) — public list.
+  leaveTypes: () => fetch(`${API_BASE_URL}/api/leaves/types`).then(parse),
+
+  // Staff self-service leave: list own records and submit a new request.
+  myLeaves: (accessToken) =>
+    fetch(`${API_BASE_URL}/api/leaves/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then(parse),
+
+  requestLeave: (accessToken, payload) =>
+    fetch(`${API_BASE_URL}/api/leaves/requests`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    }).then(parse),
 };
 
 export { API_BASE_URL };

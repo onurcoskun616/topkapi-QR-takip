@@ -14,7 +14,18 @@ from .bootstrap import (
 )
 from .config import settings
 from .deps import get_current_hq
-from .routers import auth, campuses, kiosk, leaves, logs, management, qr, reports, scan
+from .routers import (
+    auth,
+    campuses,
+    holidays,
+    kiosk,
+    leaves,
+    logs,
+    management,
+    qr,
+    reports,
+    scan,
+)
 from .tasks.scheduler import (
     auto_close_open_attendances,
     shutdown_scheduler,
@@ -58,6 +69,7 @@ app.include_router(qr.router)
 app.include_router(scan.router)
 app.include_router(logs.router)
 app.include_router(leaves.router)
+app.include_router(holidays.router)
 app.include_router(reports.router)
 app.include_router(kiosk.router)
 

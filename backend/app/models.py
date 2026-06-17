@@ -75,7 +75,9 @@ class AttendanceSource(str, enum.Enum):
 
 
 class LeaveStatus(str, enum.Enum):
-    active = "active"        # blocks scanning for the covered date range
+    requested = "requested"  # submitted by staff, awaiting director decision (does NOT block scanning)
+    active = "active"        # approved/director-created — blocks scanning for the covered date range
+    rejected = "rejected"    # staff request declined by a manager — blocks nothing
     cancelled = "cancelled"  # corrected/withdrawn — no longer blocks anything
 
 
@@ -123,6 +125,13 @@ class User(Base):
     # Birth date (staff self-registration). Only the month/day is used, to wish
     # the person a happy birthday on the kiosk when they scan in.
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    # Per-person working days, for staff who work a rotational/shift schedule
+    # (not the standard Mon–Fri). Stored as a comma-separated list of ISO
+    # weekday numbers (1=Monday … 7=Sunday), e.g. "1,2,3,4,6". ``NULL`` means
+    # "not configured": reports fall back to the caller's weekday default.
+    # Only managers may set this (görev rolü), via PATCH /api/staff/{id}.
+    working_days: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="user_role"), default=UserRole.staff, nullable=False
@@ -215,8 +224,20 @@ class LeaveRecord(Base):
     status: Mapped[LeaveStatus] = mapped_column(
         Enum(LeaveStatus, name="leave_status"), default=LeaveStatus.active, nullable=False
     )
+    # ``created_by`` is whoever opened the record: a manager (director-created,
+    # straight to ``active``) or the staff member themselves (self-request,
+    # starts ``requested``). A self-request is the case where created_by is the
+    # staff member — i.e. ``created_by_id == user_id``.
     created_by_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    # The manager who approved/rejected a staff request (NULL for director-created
+    # records, which are approved implicitly at creation).
+    decided_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -224,9 +245,42 @@ class LeaveRecord(Base):
 
     user: Mapped["User"] = relationship(foreign_keys="LeaveRecord.user_id")
     created_by: Mapped["User | None"] = relationship(foreign_keys="LeaveRecord.created_by_id")
+    decided_by: Mapped["User | None"] = relationship(foreign_keys="LeaveRecord.decided_by_id")
 
     __table_args__ = (
         Index("ix_leave_user_dates", "user_id", "start_date", "end_date"),
+    )
+
+
+class Holiday(Base):
+    """An official holiday / campus closure excluded from absence counting.
+
+    A ``campus_id`` of ``NULL`` means the holiday applies to **all** campuses
+    (national holidays — bayram, resmi tatil); a non-null value scopes it to one
+    campus (a local closure). On a date covered by an applicable holiday, the
+    absence reports do not expect anyone to be present, so the day is neither an
+    absence nor ``unresolved``. Managers manage these: a campus director for
+    their own campus, head office globally or per-campus.
+    """
+
+    __tablename__ = "holidays"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[date] = mapped_column(Date, index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # NULL = applies to every campus; otherwise scoped to one campus.
+    campus_id: Mapped[int | None] = mapped_column(
+        ForeignKey("campuses.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    created_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_holiday_date_campus", "date", "campus_id"),
     )
 
 

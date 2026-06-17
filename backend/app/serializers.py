@@ -6,11 +6,13 @@ in explicitly by the caller.
 """
 from .models import User
 from .schemas import UserResponse
+from .services import parse_working_days
 
 
 def to_user_response(
     user: User, *, campus_name: str | None = None, has_device: bool = False
 ) -> UserResponse:
+    working = parse_working_days(user.working_days)
     return UserResponse(
         id=user.id,
         full_name=user.full_name,
@@ -21,6 +23,7 @@ def to_user_response(
         job_title=user.job_title,
         branch=user.branch,
         birth_date=user.birth_date,
+        working_days=sorted(working) if working is not None else None,
         campus_id=user.campus_id,
         campus_name=campus_name,
         has_device=has_device,

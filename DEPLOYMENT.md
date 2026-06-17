@@ -110,9 +110,23 @@ Backend ilk açılışta **5 kampüsü** (İkitelli OSB, İstanbul OSB, Esenyurt
    sekmesinden tarih aralıklı bir kayıt açar; aktif olduğu sürece personelin
    QR okutması engellenir. Personel gelirse kayıt **Düzelt**ilir veya **İptal
    Et**ilir — scan hemen yeniden açılır.
-7. **Kampüsler** sekmesinden (yalnızca genel merkez) her kampüsün mesai
-   başlangıç/bitiş saati belirlenir; **Raporlar** sekmesindeki geç kalma/erken
-   çıkış hesaplamaları bu saatlere dayanır.
+7. **Personel izin talebi:** Personel kendi telefonundan (PWA ▸ **İzin Talebi**)
+   izin türü + tarih aralığı seçip talep gönderir. Talep müdürün **İzin /
+   Devamsızlık** sekmesinde "Talep (onay bekliyor)" olarak görünür; müdür
+   **Onayla** (o aralıkta scan engellenir) veya **Reddet** der. Bekleyen
+   talepler **Gösterge Paneli**'nde de uyarı bandıyla hatırlatılır.
+8. **Dönüşümlü çalışma günleri:** Standart Pzt–Cum dışında çalışan personel için
+   müdür **Personel ▸ Çalışma Günleri** ile kişiye özel günleri işaretler;
+   devamsızlık/geç-erken raporları yalnızca o günleri bekler.
+9. **Resmi tatiller:** **Tatiller** sekmesinden müdür kendi kampüsünün
+   kapanışını, genel merkez ise **tüm kampüsler için** ulusal/resmi tatili
+   ekler. Tatil günleri devamsızlık sayımından otomatik düşülür.
+10. **"Durum girilmedi" hatırlatması:** Bir devamsız gün izinle açıklanmaz veya
+    manuel kayıtla tamamlanmazsa, **Gösterge Paneli**'nde ve **Raporlar**'da
+    `unresolved` (durum girilmedi) olarak işaretlenir — gözden kaçmaz.
+11. **Kampüsler** sekmesinden (yalnızca genel merkez) her kampüsün mesai
+    başlangıç/bitiş saati belirlenir; **Raporlar** sekmesindeki geç kalma/erken
+    çıkış hesaplamaları bu saatlere dayanır.
 
 > Genel merkez panelde **kampüs filtresi** ile tek tek kampüsleri veya tümünü
 > görebilir; **Raporlar** sekmesinden tarih aralığı, tolerans dakikası ve

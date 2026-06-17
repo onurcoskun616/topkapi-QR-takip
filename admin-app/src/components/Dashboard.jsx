@@ -23,6 +23,8 @@ export default function Dashboard({ isHq }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [reminder, setReminder] = useState(null);
+  const [pendingLeaves, setPendingLeaves] = useState(0);
 
   const campusFilter = isHq && campusId ? { campusId } : {};
 
@@ -58,6 +60,16 @@ export default function Dashboard({ isHq }) {
       .then(setStaff)
       .catch((e) => setError(e.message));
     loadSummary();
+    // "Durum girilmedi" reminder: recent absence days still missing a status.
+    api
+      .unresolvedReminder(token, { ...campusFilter, days: 14 })
+      .then(setReminder)
+      .catch(() => {});
+    // Pending staff leave requests awaiting approval.
+    api
+      .listLeaves(token, { ...campusFilter, status: "requested" })
+      .then((rows) => setPendingLeaves(rows.length))
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, campusId]);
 
@@ -101,6 +113,21 @@ export default function Dashboard({ isHq }) {
             </select>
           </label>
         </section>
+      )}
+
+      {/* Attention banners: unresolved-status reminder + pending leave requests */}
+      {reminder && reminder.unresolved_count > 0 && (
+        <div className="banner banner--warn">
+          <strong>Durum girilmedi:</strong> {reminder.start_date} – {reminder.end_date}{" "}
+          aralığında <strong>{reminder.unresolved_count}</strong> gün için durum girilmemiş
+          (devamsızlık açıklanmamış). "İzin / Devamsızlık" veya manuel kayıt ile çözümleyin.
+        </div>
+      )}
+      {pendingLeaves > 0 && (
+        <div className="banner banner--info">
+          <strong>{pendingLeaves}</strong> personel izin talebi onayınızı bekliyor — "İzin /
+          Devamsızlık" sekmesinden onaylayın veya reddedin.
+        </div>
       )}
 
       {/* KPI cards */}

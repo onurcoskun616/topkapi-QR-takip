@@ -8,6 +8,26 @@ const STATUS_LABEL = {
   disabled: "Devre dışı",
 };
 
+// ISO weekday numbers (1=Mon … 7=Sun) with short Turkish labels.
+const WEEKDAYS = [
+  { n: 1, label: "Pzt" },
+  { n: 2, label: "Sal" },
+  { n: 3, label: "Çar" },
+  { n: 4, label: "Per" },
+  { n: 5, label: "Cum" },
+  { n: 6, label: "Cmt" },
+  { n: 7, label: "Paz" },
+];
+
+const DEFAULT_WORKING = [1, 2, 3, 4, 5];
+
+function workingDaysLabel(days) {
+  if (!days || days.length === 0) return "Pzt–Cum (varsayılan)";
+  return WEEKDAYS.filter((d) => days.includes(d.n))
+    .map((d) => d.label)
+    .join(", ");
+}
+
 function nowLocal() {
   const d = new Date();
   const off = d.getTimezoneOffset();
@@ -28,6 +48,11 @@ export default function Staff({ isHq }) {
   const [manualForm, setManualForm] = useState({ type: "IN", date: "", time: "", note: "" });
   const [manualBusy, setManualBusy] = useState(false);
   const [manualError, setManualError] = useState(null);
+
+  const [workingForId, setWorkingForId] = useState(null);
+  const [workingSel, setWorkingSel] = useState(DEFAULT_WORKING);
+  const [workingBusy, setWorkingBusy] = useState(false);
+  const [workingError, setWorkingError] = useState(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -112,8 +137,104 @@ export default function Staff({ isHq }) {
     }
   };
 
+  const openWorking = (u) => {
+    setWorkingForId(u.id);
+    setWorkingError(null);
+    setWorkingSel(u.working_days && u.working_days.length ? u.working_days : DEFAULT_WORKING);
+  };
+
+  const closeWorking = () => {
+    setWorkingForId(null);
+    setWorkingError(null);
+  };
+
+  const toggleDay = (n) =>
+    setWorkingSel((sel) =>
+      sel.includes(n) ? sel.filter((x) => x !== n) : [...sel, n].sort((a, b) => a - b)
+    );
+
+  const submitWorking = async (u) => {
+    if (workingSel.length === 0) {
+      setWorkingError("En az bir çalışma günü seçin (veya varsayılana sıfırlayın).");
+      return;
+    }
+    setWorkingBusy(true);
+    setWorkingError(null);
+    try {
+      await api.updateStaff(token, u.id, { working_days: workingSel });
+      setNotice(`${u.full_name} için çalışma günleri güncellendi.`);
+      closeWorking();
+      await load();
+    } catch (err) {
+      setWorkingError(err.message);
+    } finally {
+      setWorkingBusy(false);
+    }
+  };
+
+  const resetWorking = async (u) => {
+    setWorkingBusy(true);
+    setWorkingError(null);
+    try {
+      await api.updateStaff(token, u.id, { working_days: [] });
+      setNotice(`${u.full_name} için çalışma günleri varsayılana (Pzt–Cum) sıfırlandı.`);
+      closeWorking();
+      await load();
+    } catch (err) {
+      setWorkingError(err.message);
+    } finally {
+      setWorkingBusy(false);
+    }
+  };
+
   const pending = staff.filter((u) => u.status === "pending");
   const others = staff.filter((u) => u.status !== "pending");
+
+  const WorkingRow = ({ u }) => (
+    <tr className="manual-row">
+      <td colSpan={isHq ? 6 : 5}>
+        <div className="manual-form">
+          <span className="manual-form__title">
+            <strong>{u.full_name}</strong> için çalışma günleri — dönüşümlü çalışan personel için
+            işaretleyin (devamsızlık raporu yalnızca seçili günleri bekler)
+          </span>
+          <div className="weekday-picker">
+            {WEEKDAYS.map((d) => (
+              <label key={d.n} className={workingSel.includes(d.n) ? "weekday weekday--on" : "weekday"}>
+                <input
+                  type="checkbox"
+                  checked={workingSel.includes(d.n)}
+                  onChange={() => toggleDay(d.n)}
+                />
+                {d.label}
+              </label>
+            ))}
+          </div>
+          <div className="actions">
+            <button
+              className="btn btn--primary btn--sm"
+              disabled={workingBusy}
+              onClick={() => submitWorking(u)}
+            >
+              {workingBusy ? "Kaydediliyor…" : "Kaydet"}
+            </button>
+            <button
+              className="btn btn--ghost btn--sm"
+              disabled={workingBusy}
+              onClick={() => resetWorking(u)}
+              title="Pzt–Cum varsayılanına döner"
+            >
+              Varsayılana Sıfırla
+            </button>
+            <button className="btn btn--ghost btn--sm" disabled={workingBusy} onClick={closeWorking}>
+              Vazgeç
+            </button>
+          </div>
+          {workingError && <p className="error">{workingError}</p>}
+        </div>
+      </td>
+    </tr>
+  );
 
   const ManualRow = ({ u }) => (
     <tr className="manual-row">
@@ -182,6 +303,9 @@ export default function Staff({ isHq }) {
           <div className="muted small">
             {u.job_title} · {u.branch}
           </div>
+          {u.status === "active" && (
+            <div className="muted small">Çalışma: {workingDaysLabel(u.working_days)}</div>
+          )}
         </td>
         <td className="muted small">{u.phone || "—"}</td>
         {isHq && <td className="muted small">{u.campus_name || "—"}</td>}
@@ -227,6 +351,14 @@ export default function Staff({ isHq }) {
               </button>
               <button
                 className="btn btn--ghost btn--sm"
+                disabled={busyId === u.id}
+                onClick={() => (workingForId === u.id ? closeWorking() : openWorking(u))}
+                title="Dönüşümlü/özel çalışma günleri tanımlar"
+              >
+                Çalışma Günleri
+              </button>
+              <button
+                className="btn btn--ghost btn--sm"
                 disabled={busyId === u.id || !u.has_device}
                 onClick={() => reset(u)}
                 title="Telefon değişikliği için cihaz kaydını sıfırlar"
@@ -254,6 +386,7 @@ export default function Staff({ isHq }) {
         </td>
       </tr>
       {manualForId === u.id && <ManualRow u={u} />}
+      {workingForId === u.id && <WorkingRow u={u} />}
     </>
   );
 

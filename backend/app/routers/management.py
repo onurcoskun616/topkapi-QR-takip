@@ -18,6 +18,7 @@ from ..schemas import DirectorCreate, StaffUpdate, UserResponse
 from ..scoping import load_scoped_staff
 from ..security import hash_password
 from ..serializers import to_user_response
+from ..services import format_working_days
 
 router = APIRouter(prefix="/api", tags=["management"])
 
@@ -148,6 +149,10 @@ async def update_staff(
         staff.branch = payload.branch.strip()
     if payload.birth_date is not None:
         staff.birth_date = payload.birth_date
+    # working_days is presence-detected so "" / null / [] can clear it back to
+    # the default Mon–Fri week, while omitting it leaves the schedule untouched.
+    if "working_days" in payload.model_fields_set:
+        staff.working_days = format_working_days(payload.working_days)
     if payload.campus_id is not None and payload.campus_id != staff.campus_id:
         # A director may not move staff out of their own campus.
         if manager.role == UserRole.campus_director:

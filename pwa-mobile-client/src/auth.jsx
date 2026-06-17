@@ -108,9 +108,25 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Generic one-shot-refresh wrapper for any authed call (mirrors `scan`), so a
+  // token that expired mid-day is refreshed once before the call gives up.
+  const withAuth = async (fn) => {
+    try {
+      return await fn(accessRef.current);
+    } catch (err) {
+      if (err.status === 401 && (await silentRefresh())) {
+        return await fn(accessRef.current);
+      }
+      throw err;
+    }
+  };
+
+  const myLeaves = () => withAuth((t) => api.myLeaves(t));
+  const requestLeave = (payload) => withAuth((t) => api.requestLeave(t, payload));
+
   return (
     <AuthContext.Provider
-      value={{ user, phase, register, recheck, logout, scan }}
+      value={{ user, phase, register, recheck, logout, scan, myLeaves, requestLeave }}
     >
       {children}
     </AuthContext.Provider>
