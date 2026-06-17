@@ -13,10 +13,14 @@ function readCampusId() {
 }
 
 // How long each on-screen confirmation stays up, and how often we poll for new
-// scans. The poll is brisk so a green check appears moments after scanning.
-const SCAN_DISPLAY_MS = 2600;
+// scans. The poll is brisk so a green check appears within a fraction of a
+// second of scanning. The phone always shows its own instant result too.
+const SCAN_DISPLAY_MS = 1800;
 const BIRTHDAY_DISPLAY_MS = 9000;
-const SCAN_POLL_MS = 1500;
+const SCAN_POLL_MS = 700;
+// Cap pending confirmations so a morning rush keeps the tablet on recent scans
+// instead of lagging seconds behind (birthdays are never dropped).
+const MAX_PENDING = 4;
 
 /**
  * Full-screen kiosk:
@@ -126,6 +130,18 @@ export default function App() {
             kind: s.birthday ? "birthday" : "scan",
             name: s.full_name,
             type: s.type,
+          });
+        }
+        // During a rush, drop the oldest plain confirmations (keep birthdays)
+        // so the tablet stays on recent scans rather than lagging behind.
+        if (queueRef.current.length > MAX_PENDING) {
+          let over = queueRef.current.length - MAX_PENDING;
+          queueRef.current = queueRef.current.filter((e) => {
+            if (over > 0 && e.kind === "scan") {
+              over -= 1;
+              return false;
+            }
+            return true;
           });
         }
         pump();

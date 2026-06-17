@@ -31,9 +31,13 @@ export default function Scanner() {
       if (lockRef.current) return;
       lockRef.current = true;
       setPhase("processing");
-      await stopScanner();
+      // Fire the scan request immediately and tear the camera down in parallel,
+      // so the success/failure shows as soon as the server replies instead of
+      // waiting for the camera to stop first.
+      const scanPromise = scan(decodedText);
+      stopScanner();
       try {
-        const res = await scan(decodedText);
+        const res = await scanPromise;
         setResult({
           kind: res.type === "IN" ? "in" : "out",
           message: res.message,

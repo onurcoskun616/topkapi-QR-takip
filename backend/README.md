@@ -83,12 +83,14 @@ uvicorn app.main:app --reload --port 8000
 ## Tablette tarama onayı ve doğum günü kutlaması (kiosk)
 
 Tarama telefonda yapılır (QR tabletten okunur, `POST /api/scan` telefondan
-gelir), bu yüzden tablet sonucu doğrudan görmez. Tabletin **yeşil onay** ve
-**doğum günü kutlaması** gösterebilmesi için kiosk, kampüsünün son taramalarını
-yoklar.
+gelir). Personelin elindeki **telefon, sonucu ağ yanıtı gelir gelmez anında**
+gösterir (tarama isteği kamera kapanmasını beklemeden gönderilir). Tablet ise
+sonucu doğrudan görmediğinden kampüsünün son taramalarını yoklayarak **yeşil
+onay** ve **doğum günü kutlaması** gösterir.
 
 - Tablet hangi kampüse ait olduğunu URL'den okur (`?campus=<id>`) ve
-  `/api/kiosk/recent-scans?campus_id=<id>` ucunu ~1,5 sn'de bir yoklar.
+  `/api/kiosk/recent-scans?campus_id=<id>` ucunu ~0,7 sn'de bir yoklar; yeşil
+  onay genelde taramadan ~0,4 sn sonra (en fazla ~1 sn) belirir.
 - **Yeşil onay:** Her başarılı QR taramasından hemen sonra tablette yeşil tikli
   "Giriş başarılı" / "Çıkış başarılı" + isim bildirimi çıkar. Yalnızca son ~12
   sn içindeki geçerli `qr_scan` kayıtları döner (sonradan açılan tablet eski
