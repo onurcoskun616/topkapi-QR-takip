@@ -319,3 +319,15 @@ body {
   background: var(--line);
   color: var(--muted);
 }
+
+/* Check-out reminder: still inside after shift ended (before auto-close). */
+.checkout-reminder {
+  margin: 10px 14px 0;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: rgba(255, 200, 61, 0.16);
+  border: 1px solid rgba(255, 200, 61, 0.45);
+  color: #ffe08a;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}

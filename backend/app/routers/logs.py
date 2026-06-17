@@ -31,6 +31,7 @@ from ..schemas import (
     AttendanceLogResponse,
     AttendanceLogWithUser,
     ManualAttendanceCreate,
+    MyStatusResponse,
     PresenceEntry,
     TodaySummary,
 )
@@ -105,6 +106,41 @@ async def my_logs(
         .limit(limit)
     )
     return list(result.scalars().all())
+
+
+@router.get("/me/status", response_model=MyStatusResponse)
+async def my_status(
+    current: User = Depends(get_current_active_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """The staff member's own live state: are they currently 'inside', and (if
+    their campus shift has ended) should they be reminded to scan out before
+    the nightly auto-close. Powers the PWA check-out reminder."""
+    tz = ZoneInfo(settings.attendance_timezone)
+    now_utc = datetime.now(timezone.utc)
+    today_local = now_utc.astimezone(tz).date()
+    last_log = await get_last_log_for_day(db, current.id, today_local)
+
+    currently_in = last_log is not None and last_log.type == AttendanceType.IN
+    should_check_out = False
+    minutes_overdue: int | None = None
+    if currently_in and current.campus_id is not None:
+        campus = await db.get(Campus, current.campus_id)
+        if campus is not None and campus.shift_end is not None:
+            shift_end_utc = datetime.combine(
+                today_local, campus.shift_end, tzinfo=tz
+            ).astimezone(timezone.utc)
+            overdue = (now_utc - shift_end_utc).total_seconds() / 60
+            if overdue > 0:
+                should_check_out = True
+                minutes_overdue = int(overdue)
+
+    return MyStatusResponse(
+        currently_in=currently_in,
+        since=last_log.scan_time if currently_in else None,
+        should_check_out=should_check_out,
+        minutes_overdue=minutes_overdue,
+    )
 
 
 @router.get("", response_model=list[AttendanceLogWithUser])

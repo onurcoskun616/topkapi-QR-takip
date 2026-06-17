@@ -35,6 +35,30 @@ function nowLocal() {
   return { date: local.slice(0, 10), time: local.slice(11, 16) };
 }
 
+// Parse pasted CSV/TSV roster lines into staff rows. Columns (in order):
+// Ad Soyad, Telefon, Görev, Branş, Doğum (YYYY-AA-GG, opsiyonel). Separator
+// may be comma, semicolon or tab. A header line is auto-skipped.
+function parseRoster(text) {
+  const out = [];
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    const cells = line.split(/[\t;,]/).map((c) => c.trim());
+    const [full_name, phone, job_title, branch, birth_date] = cells;
+    // Skip an obvious header row.
+    if (/ad\s*soyad|telefon/i.test(full_name) && /telefon|phone/i.test(phone || "")) continue;
+    const row = { full_name, phone, job_title, branch };
+    if (birth_date && /^\d{4}-\d{2}-\d{2}$/.test(birth_date)) row.birth_date = birth_date;
+    const errors = [];
+    if (!full_name || full_name.length < 2) errors.push("ad");
+    if (!phone || phone.replace(/\D/g, "").length < 7) errors.push("telefon");
+    if (!job_title) errors.push("görev");
+    if (!branch) errors.push("branş");
+    row._error = errors.length ? `eksik/geçersiz: ${errors.join(", ")}` : null;
+    out.push(row);
+  }
+  return out;
+}
+
 export default function Staff({ isHq }) {
   const { token } = useAuth();
   const [staff, setStaff] = useState([]);
@@ -53,6 +77,14 @@ export default function Staff({ isHq }) {
   const [workingSel, setWorkingSel] = useState(DEFAULT_WORKING);
   const [workingBusy, setWorkingBusy] = useState(false);
   const [workingError, setWorkingError] = useState(null);
+
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkCampusId, setBulkCampusId] = useState("");
+  const [bulkRows, setBulkRows] = useState([]);
+  const [bulkResult, setBulkResult] = useState(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -187,8 +219,49 @@ export default function Staff({ isHq }) {
     }
   };
 
+  const previewBulk = () => {
+    setBulkResult(null);
+    setBulkError(null);
+    const rows = parseRoster(bulkText);
+    if (rows.length === 0) {
+      setBulkError("Çözümlenecek satır bulunamadı.");
+    }
+    setBulkRows(rows);
+  };
+
+  const submitBulk = async () => {
+    const valid = bulkRows.filter((r) => !r._error);
+    if (valid.length === 0) {
+      setBulkError("Geçerli satır yok.");
+      return;
+    }
+    if (isHq && !bulkCampusId) {
+      setBulkError("Genel merkez için hedef kampüs seçin.");
+      return;
+    }
+    setBulkBusy(true);
+    setBulkError(null);
+    try {
+      const res = await api.bulkImportStaff(token, {
+        rows: valid.map(({ _error, ...r }) => ({ ...r, phone: r.phone })),
+        campus_id: isHq ? Number(bulkCampusId) : undefined,
+      });
+      setBulkResult(res);
+      setNotice(`${res.created_count} personel içe aktarıldı (${res.skipped_count} atlandı).`);
+      setBulkRows([]);
+      setBulkText("");
+      await load();
+    } catch (e) {
+      setBulkError(e.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const pending = staff.filter((u) => u.status === "pending");
   const others = staff.filter((u) => u.status !== "pending");
+
+  const validCount = bulkRows.filter((r) => !r._error).length;
 
   const WorkingRow = ({ u }) => (
     <tr className="manual-row">
@@ -412,6 +485,126 @@ export default function Staff({ isHq }) {
 
       {error && <p className="error">{error}</p>}
       {notice && <p className="notice">{notice}</p>}
+
+      <section className="card">
+        <div className="filters">
+          <h2 className="card__title" style={{ margin: 0 }}>
+            Toplu Personel İçe Aktarma
+          </h2>
+          <div className="grow" />
+          <button className="btn btn--ghost btn--sm" onClick={() => setShowBulk((v) => !v)}>
+            {showBulk ? "Gizle" : "Aç"}
+          </button>
+        </div>
+        {showBulk && (
+          <div className="stack">
+            <p className="muted small">
+              Her satıra bir personel yapıştırın — sütunlar:{" "}
+              <code>Ad Soyad, Telefon, Görev, Branş, Doğum(YYYY-AA-GG, ops.)</code>. Ayraç virgül,
+              noktalı virgül veya sekme olabilir (Excel'den kopyalanabilir). Kayıtlar <strong>aktif</strong>{" "}
+              olarak açılır; personel aynı telefon numarasıyla PWA'dan kaydolunca cihazına bağlanır.
+            </p>
+            {isHq && (
+              <label className="field field--inline">
+                <span>Hedef Kampüs</span>
+                <select value={bulkCampusId} onChange={(e) => setBulkCampusId(e.target.value)}>
+                  <option value="">Kampüs seçin…</option>
+                  {campuses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <textarea
+              className="input"
+              rows={6}
+              placeholder={"Ali Veli, 0532 111 22 33, Öğretmen, Matematik, 1990-05-20\nAyşe Kaya; 0533 444 55 66; Öğretmen; Fizik"}
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              style={{ fontFamily: "monospace", width: "100%" }}
+            />
+            <div className="actions">
+              <button className="btn btn--ghost btn--sm" onClick={previewBulk}>
+                Önizle
+              </button>
+              <button
+                className="btn btn--primary btn--sm"
+                disabled={bulkBusy || validCount === 0}
+                onClick={submitBulk}
+              >
+                {bulkBusy ? "Aktarılıyor…" : `İçe Aktar (${validCount} geçerli)`}
+              </button>
+            </div>
+            {bulkError && <p className="error">{bulkError}</p>}
+
+            {bulkRows.length > 0 && (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Ad Soyad</th>
+                      <th>Telefon</th>
+                      <th>Görev</th>
+                      <th>Branş</th>
+                      <th>Doğum</th>
+                      <th>Durum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bulkRows.map((r, i) => (
+                      <tr key={i}>
+                        <td>{r.full_name}</td>
+                        <td className="muted small">{r.phone}</td>
+                        <td className="muted small">{r.job_title}</td>
+                        <td className="muted small">{r.branch}</td>
+                        <td className="muted small">{r.birth_date || "—"}</td>
+                        <td>
+                          {r._error ? (
+                            <span className="badge badge--out">{r._error}</span>
+                          ) : (
+                            <span className="badge badge--in">hazır</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {bulkResult && (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Ad Soyad</th>
+                      <th>Telefon</th>
+                      <th>Sonuç</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bulkResult.results.map((r, i) => (
+                      <tr key={i}>
+                        <td>{r.full_name}</td>
+                        <td className="muted small">{r.phone}</td>
+                        <td>
+                          {r.created ? (
+                            <span className="badge badge--in">eklendi</span>
+                          ) : (
+                            <span className="badge badge--auto">{r.reason || "atlandı"}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
       <section className="card">
         <h2 className="card__title">Onay Bekleyenler ({pending.length})</h2>

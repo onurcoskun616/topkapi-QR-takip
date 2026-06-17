@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
@@ -37,7 +37,11 @@ from ..schemas import (
     AbsenceReasonStat,
     AbsenceSummaryResponse,
     AbsenceTotalEntry,
+    DailyTrendEntry,
+    DailyTrendResponse,
     EarlyLeaveRankingEntry,
+    ForgotCheckoutEntry,
+    ForgotCheckoutResponse,
     LateRankingEntry,
     UnresolvedReminderResponse,
 )
@@ -450,6 +454,145 @@ async def unresolved_reminder(
         unresolved_count=len(unresolved),
         entries=unresolved,
     )
+
+
+@router.get("/daily-trend", response_model=DailyTrendResponse)
+async def daily_trend(
+    start_date: date,
+    end_date: date,
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+    campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    exclude_weekends: bool = True,
+):
+    """Per-day attendance aggregates over the range: how many staff were
+    expected, present, on leave, or absent-without-status (unresolved). Drives
+    the dashboard/report trend chart."""
+    _validate_range(start_date, end_date)
+    tz = ZoneInfo(settings.attendance_timezone)
+    staff = await _scoped_active_staff(db, manager, campus_id, None)
+    all_days = _all_days(start_date, end_date)
+
+    # Per-day accumulators, seeded so every day in the range is present even if
+    # it is a weekend/holiday (expected == 0 there).
+    buckets: dict[date, DailyTrendEntry] = {
+        d: DailyTrendEntry(date=d, expected=0, present=0, on_leave=0, unresolved=0)
+        for d in all_days
+    }
+
+    if staff:
+        if len(staff) * max(len(all_days), 1) > 20000:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Sonuç kümesi çok büyük; tarih aralığını veya kampüs filtresini daraltın.",
+            )
+        logs = await _logs_for_staff(db, [s.id for s in staff], start_date, end_date)
+        present_days = {(log.user_id, log.scan_time.astimezone(tz).date()) for log in logs}
+
+        leave_rows = await db.execute(
+            select(LeaveRecord).where(
+                LeaveRecord.user_id.in_([s.id for s in staff]),
+                LeaveRecord.status == LeaveStatus.active,
+                LeaveRecord.start_date <= end_date,
+                LeaveRecord.end_date >= start_date,
+            )
+        )
+        leaves_by_staff: dict[int, list[LeaveRecord]] = defaultdict(list)
+        for leave in leave_rows.scalars().all():
+            leaves_by_staff[leave.user_id].append(leave)
+
+        national_holidays, holidays_by_campus = await _load_holidays(db, start_date, end_date)
+
+        for s in staff:
+            staff_leaves = leaves_by_staff.get(s.id, [])
+            for d in _expected_days_for_staff(
+                s, all_days, exclude_weekends, national_holidays, holidays_by_campus
+            ):
+                entry = buckets[d]
+                entry.expected += 1
+                if (s.id, d) in present_days:
+                    entry.present += 1
+                elif any(lv.start_date <= d <= lv.end_date for lv in staff_leaves):
+                    entry.on_leave += 1
+                else:
+                    entry.unresolved += 1
+
+    entries = [buckets[d] for d in all_days]
+    return DailyTrendResponse(
+        start_date=start_date,
+        end_date=end_date,
+        entries=entries,
+        total_expected=sum(e.expected for e in entries),
+        total_present=sum(e.present for e in entries),
+        total_on_leave=sum(e.on_leave for e in entries),
+        total_unresolved=sum(e.unresolved for e in entries),
+    )
+
+
+@router.get("/forgot-checkout", response_model=ForgotCheckoutResponse)
+async def forgot_checkout(
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+    campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    threshold_minutes: int = Query(30, ge=0, le=240, description="Grace after shift end"),
+):
+    """Staff still 'inside' right now (their last log today is an IN) whose
+    campus shift has already ended by more than ``threshold_minutes`` — they
+    most likely forgot to scan out and will be auto-closed at 23:59. Surfaced
+    so a manager can nudge them before that happens."""
+    now_utc = datetime.now(timezone.utc)
+    tz = ZoneInfo(settings.attendance_timezone)
+    start_utc, end_utc = (
+        datetime.combine(now_utc.astimezone(tz).date(), time.min, tzinfo=tz).astimezone(timezone.utc),
+        datetime.combine(now_utc.astimezone(tz).date(), time.max, tzinfo=tz).astimezone(timezone.utc),
+    )
+    scope = scope_campus_id(manager, campus_id)
+
+    latest_subq = (
+        select(
+            AttendanceLog.user_id.label("uid"),
+            func.max(AttendanceLog.scan_time).label("max_time"),
+        )
+        .where(AttendanceLog.scan_time >= start_utc, AttendanceLog.scan_time <= end_utc)
+        .group_by(AttendanceLog.user_id)
+        .subquery()
+    )
+    stmt = (
+        select(AttendanceLog, User, Campus)
+        .join(
+            latest_subq,
+            (AttendanceLog.user_id == latest_subq.c.uid)
+            & (AttendanceLog.scan_time == latest_subq.c.max_time),
+        )
+        .join(User, User.id == AttendanceLog.user_id)
+        .join(Campus, Campus.id == User.campus_id, isouter=True)
+        .where(AttendanceLog.type == AttendanceType.IN)
+    )
+    if scope is not None:
+        stmt = stmt.where(User.campus_id == scope)
+
+    rows = await db.execute(stmt)
+    entries: list[ForgotCheckoutEntry] = []
+    for log, user, campus in rows.all():
+        if campus is None or campus.shift_end is None:
+            continue  # no shift configured → cannot judge "overdue"
+        shift_end_local = datetime.combine(
+            now_utc.astimezone(tz).date(), campus.shift_end, tzinfo=tz
+        )
+        minutes_overdue = (now_utc - shift_end_local.astimezone(timezone.utc)).total_seconds() / 60
+        if minutes_overdue <= threshold_minutes:
+            continue
+        entries.append(
+            ForgotCheckoutEntry(
+                user_id=user.id,
+                full_name=user.full_name,
+                campus_name=campus.name,
+                since=log.scan_time,
+                minutes_overdue=int(minutes_overdue),
+            )
+        )
+    entries.sort(key=lambda e: -e.minutes_overdue)
+    return ForgotCheckoutResponse(as_of=now_utc, entries=entries)
 
 
 @router.get("/export.xlsx", response_class=StreamingResponse)

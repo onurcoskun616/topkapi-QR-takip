@@ -29,6 +29,57 @@ function presetRange(kind) {
   return { start: iso(today), end: iso(today) };
 }
 
+// Inline stacked-bar trend chart (no chart library): one bar per day, split
+// into present / on-leave / unresolved segments scaled to the busiest day.
+function TrendChart({ trend }) {
+  if (!trend || trend.entries.length === 0) return <p className="muted">Veri yok.</p>;
+  const max = Math.max(1, ...trend.entries.map((e) => e.expected));
+  return (
+    <div className="trend">
+      <div className="trend__bars">
+        {trend.entries.map((e) => {
+          const h = (v) => `${(v / max) * 100}%`;
+          const label = e.date.slice(5); // MM-DD
+          return (
+            <div className="trend__col" key={e.date} title={`${e.date}\nBeklenen: ${e.expected}\nGelen: ${e.present}\nİzinli: ${e.on_leave}\nDurum girilmedi: ${e.unresolved}`}>
+              <div className="trend__stack">
+                <div className="trend__seg trend__seg--unresolved" style={{ height: h(e.unresolved) }} />
+                <div className="trend__seg trend__seg--leave" style={{ height: h(e.on_leave) }} />
+                <div className="trend__seg trend__seg--present" style={{ height: h(e.present) }} />
+              </div>
+              <span className="trend__label">{label}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="trend__legend">
+        <span><i className="dot dot--present" /> Gelen ({trend.total_present})</span>
+        <span><i className="dot dot--leave" /> İzinli ({trend.total_on_leave})</span>
+        <span><i className="dot dot--unresolved" /> Durum girilmedi ({trend.total_unresolved})</span>
+      </div>
+    </div>
+  );
+}
+
+// Horizontal bars for absence reasons (share of total absent days).
+function ReasonBars({ byReason }) {
+  if (!byReason || byReason.length === 0) return <p className="muted">Veri yok.</p>;
+  const max = Math.max(1, ...byReason.map((r) => r.day_count));
+  return (
+    <div className="hbars">
+      {byReason.map((r) => (
+        <div className="hbar" key={r.leave_type}>
+          <span className="hbar__label">{r.leave_type}</span>
+          <div className="hbar__track">
+            <div className="hbar__fill" style={{ width: `${(r.day_count / max) * 100}%` }} />
+          </div>
+          <span className="hbar__value">{r.day_count} gün · {r.staff_count} kişi</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Reports({ isHq }) {
   const { token } = useAuth();
   const [campuses, setCampuses] = useState([]);
@@ -41,6 +92,7 @@ export default function Reports({ isHq }) {
   const [early, setEarly] = useState([]);
   const [summary, setSummary] = useState(null);
   const [detail, setDetail] = useState([]);
+  const [trend, setTrend] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
 
   const [error, setError] = useState(null);
@@ -63,16 +115,18 @@ export default function Reports({ isHq }) {
     setBusy(true);
     setError(null);
     try {
-      const [lateRows, earlyRows, summaryRes, detailRows] = await Promise.all([
+      const [lateRows, earlyRows, summaryRes, detailRows, trendRes] = await Promise.all([
         api.lateRanking(token, filters),
         api.earlyLeaveRanking(token, filters),
         api.absenceSummary(token, filters),
         api.absenceDetail(token, filters),
+        api.dailyTrend(token, filters),
       ]);
       setLate(lateRows);
       setEarly(earlyRows);
       setSummary(summaryRes);
       setDetail(detailRows);
+      setTrend(trendRes);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -182,6 +236,9 @@ export default function Reports({ isHq }) {
           <button className="btn btn--ghost" onClick={onLogsXlsx}>
             Ham Kayıtlar (Excel)
           </button>
+          <button className="btn btn--ghost" onClick={() => window.print()}>
+            Yazdır / PDF
+          </button>
         </div>
         {error && <p className="error">{error}</p>}
         {busy && <p className="muted">Yükleniyor…</p>}
@@ -200,6 +257,16 @@ export default function Reports({ isHq }) {
           <div className="kpi__value">{early.length}</div>
           <div className="kpi__label">Erken çıkan personel sayısı</div>
         </div>
+      </section>
+
+      <section className="card">
+        <h2 className="card__title">Günlük Devam Eğilimi</h2>
+        <TrendChart trend={trend} />
+      </section>
+
+      <section className="card">
+        <h2 className="card__title">Devamsızlık Sebeplerine Göre Dağılım</h2>
+        <ReasonBars byReason={summary?.by_reason} />
       </section>
 
       <section className="card">

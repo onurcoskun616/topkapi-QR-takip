@@ -127,6 +127,19 @@ Backend ilk açılışta **5 kampüsü** (İkitelli OSB, İstanbul OSB, Esenyurt
 11. **Kampüsler** sekmesinden (yalnızca genel merkez) her kampüsün mesai
     başlangıç/bitiş saati belirlenir; **Raporlar** sekmesindeki geç kalma/erken
     çıkış hesaplamaları bu saatlere dayanır.
+12. **Toplu personel içe aktarma:** **Personel ▸ Toplu Personel İçe Aktarma**'dan
+    listeyi (Ad Soyad, Telefon, Görev, Branş, Doğum) yapıştırıp (Excel'den
+    kopyalanabilir) **Önizle → İçe Aktar** denir. Kayıtlar aktif açılır; personel
+    aynı telefonla PWA'dan kaydolunca cihazı bağlanır. Telefonu zaten kayıtlı
+    satırlar atlanır (dosya güvenle yeniden yüklenebilir).
+13. **Çıkış okutmayı unutma:** Mesai bittiği hâlde hâlâ "içeride" görünen personel
+    **Gösterge Paneli**'nde uyarı bandıyla listelenir; personelin kendi
+    telefonunda (PWA) da "çıkış okutmayı unutmayın" hatırlatması çıkar — gece
+    23:59 otomatik kapanıştan önce düzeltilebilir.
+14. **Grafikler ve takvim:** **Raporlar** sekmesinde günlük devam eğilimi ve
+    devamsızlık sebepleri grafikle gösterilir, sayfa **Yazdır/PDF** ile
+    basılabilir. **Takvim** sekmesi aktif izinleri ve tatilleri aylık takvimde
+    gösterir (gün seçilince o günün izinli personeli listelenir).
 
 > Genel merkez panelde **kampüs filtresi** ile tek tek kampüsleri veya tümünü
 > görebilir; **Raporlar** sekmesinden tarih aralığı, tolerans dakikası ve

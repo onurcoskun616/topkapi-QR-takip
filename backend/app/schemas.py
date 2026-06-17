@@ -108,6 +108,42 @@ class DirectorCreate(BaseModel):
     campus_id: int
 
 
+class StaffBulkRow(BaseModel):
+    """One staff member in a bulk import (e.g. start-of-year roster upload).
+
+    Created directly as an ``active`` account with no bound device: the staff
+    member binds their phone later by self-registering from the PWA with the
+    *same* phone number (the re-claim path), keeping their imported profile."""
+
+    full_name: str = Field(min_length=2, max_length=120)
+    phone: str = Field(min_length=7, max_length=32)
+    job_title: str = Field(min_length=2, max_length=80)
+    branch: str = Field(min_length=1, max_length=80)
+    birth_date: date | None = None
+    # hq may target a campus per row; a director is always pinned to their own.
+    campus_id: int | None = None
+
+
+class StaffBulkCreate(BaseModel):
+    rows: list[StaffBulkRow] = Field(min_length=1, max_length=500)
+    # hq default campus for rows that don't carry their own; ignored for a
+    # director (every row lands on their campus).
+    campus_id: int | None = None
+
+
+class StaffBulkRowResult(BaseModel):
+    full_name: str
+    phone: str
+    created: bool
+    reason: str | None = None  # why a row was skipped (e.g. duplicate phone)
+
+
+class StaffBulkResult(BaseModel):
+    created_count: int
+    skipped_count: int
+    results: list[StaffBulkRowResult]
+
+
 class StaffUpdate(BaseModel):
     """Optional manager correction of a staff profile (e.g. wrong campus).
 
@@ -370,6 +406,54 @@ class UnresolvedReminderResponse(BaseModel):
     end_date: date
     unresolved_count: int
     entries: list[AbsenceDayEntry]
+
+
+class DailyTrendEntry(BaseModel):
+    """Aggregate attendance for one calendar day across all in-scope staff —
+    the building block for the dashboard/report trend chart."""
+
+    date: date
+    expected: int      # staff expected to work that day (after schedule + holidays)
+    present: int       # of those, who had at least one scan
+    on_leave: int      # of those, covered by an active leave record
+    unresolved: int    # absent with no leave (= durum girilmedi)
+
+
+class DailyTrendResponse(BaseModel):
+    start_date: date
+    end_date: date
+    entries: list[DailyTrendEntry]
+    total_expected: int
+    total_present: int
+    total_on_leave: int
+    total_unresolved: int
+
+
+class ForgotCheckoutEntry(BaseModel):
+    """A staff member still 'inside' (last log today is IN) whose campus shift
+    has already ended — they likely forgot to scan out and will otherwise be
+    auto-closed at 23:59."""
+
+    user_id: int
+    full_name: str
+    campus_name: str | None = None
+    since: datetime           # the open IN time
+    minutes_overdue: int      # minutes past campus shift_end
+
+
+class ForgotCheckoutResponse(BaseModel):
+    as_of: datetime
+    entries: list[ForgotCheckoutEntry]
+
+
+class MyStatusResponse(BaseModel):
+    """A staff member's own live attendance state, so the PWA can remind them
+    to scan out when their shift has ended but they're still marked inside."""
+
+    currently_in: bool
+    since: datetime | None = None
+    should_check_out: bool = False  # inside AND past campus shift end
+    minutes_overdue: int | None = None
 
 
 # --------------------------------------------------------------------------- #

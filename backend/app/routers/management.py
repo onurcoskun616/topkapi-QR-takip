@@ -14,11 +14,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..deps import get_current_hq, get_current_manager
 from ..models import Campus, Session, User, UserRole, UserStatus
-from ..schemas import DirectorCreate, StaffUpdate, UserResponse
+from ..schemas import (
+    DirectorCreate,
+    StaffBulkCreate,
+    StaffBulkResult,
+    StaffBulkRowResult,
+    StaffUpdate,
+    UserResponse,
+)
 from ..scoping import load_scoped_staff
 from ..security import hash_password
 from ..serializers import to_user_response
-from ..services import format_working_days
+from ..services import format_working_days, normalize_phone
 
 router = APIRouter(prefix="/api", tags=["management"])
 
@@ -77,6 +84,100 @@ async def list_staff(
         )
         for s in staff
     ]
+
+
+@router.post("/staff/bulk", response_model=StaffBulkResult, status_code=status.HTTP_201_CREATED)
+async def bulk_create_staff(
+    payload: StaffBulkCreate,
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import many staff at once (e.g. a start-of-year roster).
+
+    Each row becomes an **active** account with no bound device; the staff
+    member binds a phone later by self-registering from the PWA with the same
+    phone number (the re-claim path keeps the imported profile and approval).
+
+    Scope: a director's rows all land on their own campus; hq targets the
+    per-row ``campus_id`` (falling back to the request-level ``campus_id``).
+    Rows whose phone is already registered are skipped and reported, so the
+    same file can be re-uploaded safely (idempotent on phone number).
+    """
+    valid_campus_ids = {
+        cid for (cid,) in (await db.execute(select(Campus.id))).all()
+    }
+    # Phones already taken — checked up front so a duplicate inside the same
+    # upload is also caught (not just collisions with existing accounts).
+    seen_phones: set[str] = set()
+    results: list[StaffBulkRowResult] = []
+    created_count = 0
+
+    for row in payload.rows:
+        phone = normalize_phone(row.phone)
+        if len(phone) < 7:
+            results.append(StaffBulkRowResult(
+                full_name=row.full_name, phone=row.phone, created=False,
+                reason="Geçersiz telefon numarası.",
+            ))
+            continue
+
+        if manager.role == UserRole.campus_director:
+            campus_id = manager.campus_id
+        else:
+            campus_id = row.campus_id or payload.campus_id
+        if campus_id is None:
+            results.append(StaffBulkRowResult(
+                full_name=row.full_name, phone=phone, created=False,
+                reason="Kampüs belirtilmedi.",
+            ))
+            continue
+        if campus_id not in valid_campus_ids:
+            results.append(StaffBulkRowResult(
+                full_name=row.full_name, phone=phone, created=False,
+                reason="Geçersiz kampüs.",
+            ))
+            continue
+
+        if phone in seen_phones:
+            results.append(StaffBulkRowResult(
+                full_name=row.full_name, phone=phone, created=False,
+                reason="Bu telefon dosyada birden fazla kez var.",
+            ))
+            continue
+        existing = (
+            await db.execute(select(User.id).where(User.phone == phone))
+        ).first()
+        if existing:
+            results.append(StaffBulkRowResult(
+                full_name=row.full_name, phone=phone, created=False,
+                reason="Bu telefon zaten kayıtlı.",
+            ))
+            continue
+
+        db.add(User(
+            full_name=row.full_name.strip(),
+            phone=phone,
+            job_title=row.job_title.strip(),
+            branch=row.branch.strip(),
+            birth_date=row.birth_date,
+            role=UserRole.staff,
+            status=UserStatus.active,
+            campus_id=campus_id,
+        ))
+        seen_phones.add(phone)
+        created_count += 1
+        results.append(StaffBulkRowResult(
+            full_name=row.full_name.strip(), phone=phone, created=True,
+        ))
+
+    if created_count:
+        await db.commit()
+
+    return StaffBulkResult(
+        created_count=created_count,
+        skipped_count=len(results) - created_count,
+        results=results,
+    )
 
 
 @router.post("/staff/{staff_id}/approve", response_model=UserResponse)

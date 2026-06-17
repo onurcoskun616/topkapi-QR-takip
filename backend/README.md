@@ -50,6 +50,7 @@ uvicorn app.main:app --reload --port 8000
 | POST   | `/api/auth/logout`           | user      | Mevcut oturumu (cihazı) geçersiz kıl              |
 | GET    | `/api/auth/me`               | user      | Mevcut kullanıcı (durum dahil — PWA onayı bekler) |
 | GET    | `/api/staff`                 | yönetici  | Personel listesi (müdür: kendi kampüsü)           |
+| POST   | `/api/staff/bulk`            | yönetici  | Toplu personel içe aktarma (liste → `active`; aynı telefon zaten varsa atlanır; cihaz sonradan PWA'dan bağlanır) |
 | POST   | `/api/staff/{id}/approve`    | yönetici  | Bekleyen personeli onayla                         |
 | POST   | `/api/staff/{id}/reset-device` | yönetici | Cihaz kaydını sıfırla (telefon değişikliği)      |
 | POST   | `/api/staff/{id}/disable`    | yönetici  | Personeli devre dışı bırak                        |
@@ -61,6 +62,7 @@ uvicorn app.main:app --reload --port 8000
 | GET    | `/api/kiosk/recent-scans`    | —         | Kiosk için: `campus_id` ile, son ~12 sn içindeki başarılı QR taramalarını döndürür (tablette yeşil "Giriş/Çıkış başarılı" onayı); doğum günü ilk-girişi `birthday` bayrağıyla işaretlenir |
 | POST   | `/api/scan`                  | staff (aktif) | QR okut → IN/OUT toggle                        |
 | GET    | `/api/logs/me`               | staff     | Kendi geçmişi                                     |
+| GET    | `/api/logs/me/status`        | staff     | Kendi anlık durumu (içeride mi; mesai bittiyse "çıkış okut" hatırlatması) |
 | GET    | `/api/logs`                  | yönetici  | Kayıtlar (kampüs kapsamlı; hq `campus_id` filtreli)|
 | POST   | `/api/logs/manual`           | yönetici  | Manuel giriş/çıkış kaydı ekle (telefon arızalı vb. — yalnızca eksik kaydı tamamlar, var olan QR kaydını değiştiremez) |
 | GET    | `/api/logs/export`           | yönetici  | CSV dışa aktarım (UTC + yerel saat + kampüs, tarih aralığı filtreli) |
@@ -83,6 +85,8 @@ uvicorn app.main:app --reload --port 8000
 | GET    | `/api/reports/absences`      | yönetici  | Devamsızlık günü detayı (yalnızca beklenen çalışma günleri; izinle açıklanan / `unresolved`) |
 | GET    | `/api/reports/absence-summary` | yönetici | İzin türüne göre toplam + personel başına devamsızlık özeti |
 | GET    | `/api/reports/unresolved-reminder` | yönetici | Son N gün (dün biten pencere) içinde **durum girilmemiş** devamsızlık günleri — müdür hatırlatması |
+| GET    | `/api/reports/daily-trend`   | yönetici  | Gün gün beklenen/gelen/izinli/durum-girilmedi sayıları (gösterge grafiği verisi) |
+| GET    | `/api/reports/forgot-checkout` | yönetici | Mesai bittiği hâlde hâlâ "içeride" görünen personel (çıkış okutmayı unutmuş olabilir; gece otomatik kapanıştan önce hatırlatma) |
 | GET    | `/api/reports/export.xlsx`   | yönetici  | Yukarıdaki rapor tablolarının tamamını Excel'e aktar |
 | PATCH  | `/api/campuses/{id}/shift`   | **hq**    | Kampüsün mesai başlangıç/bitiş saatini belirle (yalnızca genel merkez; müdürün yetkisi yok) |
 | POST   | `/api/admin/run-auto-close`  | hq        | Gece kapanışını elle tetikle                      |
@@ -163,6 +167,25 @@ onay** ve **doğum günü kutlaması** gösterir.
   çıkış hesaplamalarının dayanağıdır; yalnızca **hq** bu saatleri
   değiştirebilir (`PATCH /api/campuses/{id}/shift`) — kampüs müdürünün bu uç
   noktaya erişimi yoktur (403).
+- **Toplu personel içe aktarma** (`POST /api/staff/bulk`): Yönetici bir personel
+  listesini (ad, telefon, görev, branş, doğum tarihi opsiyonel) tek seferde
+  ekler. Kayıtlar doğrudan **aktif** açılır, cihaza bağlı değildir; personel
+  aynı telefon numarasıyla PWA'dan kaydolunca cihazı bağlanır (re-claim akışı,
+  profil ve onay korunur). Telefonu zaten kayıtlı satırlar atlanır ve raporlanır
+  — aynı dosya güvenle yeniden yüklenebilir (telefon bazında idempotent). Müdürün
+  satırları kendi kampüsüne, hq'nin satırları belirtilen kampüse açılır.
+- **Çıkış okutmayı unutma hatırlatması** (`GET /api/reports/forgot-checkout` +
+  `GET /api/logs/me/status`): Mesai (kampüs `shift_end`) bittiği hâlde son
+  hareketi IN olan (hâlâ "içeride") personel listelenir — gece 23:59 otomatik
+  kapanıştan önce müdür panelde, personel ise PWA'da hatırlatılır.
+- **Günlük devam eğilimi** (`GET /api/reports/daily-trend`): Tarih aralığındaki
+  her gün için beklenen / gelen / izinli / durum-girilmedi sayılarını döndürür;
+  panelde grafik (yığılmış çubuk) olarak gösterilir. Devamsızlık sebepleri de
+  yatay çubuk grafikle özetlenir, rapor sayfası **Yazdır/PDF** ile basılabilir.
+- **İzin takvimi**: Panelin **Takvim** sekmesi aktif izinleri ve tatilleri aylık
+  takvim olarak gösterir (her güne kimlerin izinli olduğu, tatil adları); gün
+  seçilince o günün izinli personel listesi açılır. Mevcut `GET /api/leaves` ve
+  `GET /api/holidays` uçlarından beslenir, yeni uç gerektirmez.
 - **Şema yükseltmeleri**: `working_days`, `decided_by_id`, `decided_at`
   kolonları ve `leave_status` enum'una eklenen `requested`/`rejected` değerleri
   mevcut veritabanlarında açılışta otomatik (idempotent) eklenir

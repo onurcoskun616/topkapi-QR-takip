@@ -76,6 +76,10 @@ export const api = {
   updateStaff: (token, id, payload) =>
     request(`/api/staff/${id}`, { method: "PATCH", token, body: payload }),
 
+  // Bulk import a roster of staff (created active, device bound later on PWA).
+  bulkImportStaff: (token, payload) =>
+    request("/api/staff/bulk", { method: "POST", token, body: payload }),
+
   // --- directors (hq only) ------------------------------------------------
   listDirectors: (token) => request("/api/directors", { token }),
 
@@ -151,6 +155,28 @@ export const api = {
 
   deleteHoliday: (token, id) =>
     request(`/api/holidays/${id}`, { method: "DELETE", token }),
+
+  // --- forgot-to-check-out reminder (still inside after shift end) --------
+  forgotCheckout: (token, { campusId, thresholdMinutes } = {}) =>
+    request(
+      `/api/reports/forgot-checkout${qs({
+        campus_id: campusId,
+        threshold_minutes: thresholdMinutes,
+      })}`,
+      { token }
+    ),
+
+  // --- daily attendance trend (chart data) -------------------------------
+  dailyTrend: (token, { startDate, endDate, campusId, excludeWeekends } = {}) =>
+    request(
+      `/api/reports/daily-trend${qs({
+        start_date: startDate,
+        end_date: endDate,
+        campus_id: campusId,
+        exclude_weekends: excludeWeekends,
+      })}`,
+      { token }
+    ),
 
   // --- unresolved-status reminder (durum girilmedi) ----------------------
   unresolvedReminder: (token, { campusId, days, excludeWeekends } = {}) =>

@@ -5,6 +5,7 @@ import Dashboard from "./components/Dashboard";
 import Staff from "./components/Staff";
 import Leaves from "./components/Leaves";
 import Holidays from "./components/Holidays";
+import Calendar from "./components/Calendar";
 import Reports from "./components/Reports";
 import Directors from "./components/Directors";
 import Campuses from "./components/Campuses";
@@ -56,6 +57,12 @@ export default function App() {
             Tatiller
           </button>
           <button
+            className={tab === "calendar" ? "tab tab--active" : "tab"}
+            onClick={() => setTab("calendar")}
+          >
+            Takvim
+          </button>
+          <button
             className={tab === "reports" ? "tab tab--active" : "tab"}
             onClick={() => setTab("reports")}
           >
@@ -92,6 +99,7 @@ export default function App() {
         {tab === "staff" && <Staff isHq={isHq} />}
         {tab === "leaves" && <Leaves isHq={isHq} />}
         {tab === "holidays" && <Holidays isHq={isHq} />}
+        {tab === "calendar" && <Calendar isHq={isHq} />}
         {tab === "reports" && <Reports isHq={isHq} />}
         {tab === "directors" && isHq && <Directors />}
         {tab === "campuses" && isHq && <Campuses />}

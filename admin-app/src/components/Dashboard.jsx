@@ -25,6 +25,7 @@ export default function Dashboard({ isHq }) {
   const [notice, setNotice] = useState(null);
   const [reminder, setReminder] = useState(null);
   const [pendingLeaves, setPendingLeaves] = useState(0);
+  const [forgot, setForgot] = useState([]);
 
   const campusFilter = isHq && campusId ? { campusId } : {};
 
@@ -69,6 +70,11 @@ export default function Dashboard({ isHq }) {
     api
       .listLeaves(token, { ...campusFilter, status: "requested" })
       .then((rows) => setPendingLeaves(rows.length))
+      .catch(() => {});
+    // Staff still inside after their shift ended (likely forgot to scan out).
+    api
+      .forgotCheckout(token, { ...campusFilter })
+      .then((res) => setForgot(res.entries))
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, campusId]);
@@ -127,6 +133,23 @@ export default function Dashboard({ isHq }) {
         <div className="banner banner--info">
           <strong>{pendingLeaves}</strong> personel izin talebi onayınızı bekliyor — "İzin /
           Devamsızlık" sekmesinden onaylayın veya reddedin.
+        </div>
+      )}
+      {forgot.length > 0 && (
+        <div className="banner banner--warn">
+          <strong>Çıkış okutmayı unutmuş olabilir:</strong> mesai bitmesine rağmen{" "}
+          <strong>{forgot.length}</strong> personel hâlâ "içeride" görünüyor. Gece 23:59
+          otomatik kapanıştan önce hatırlatın.
+          <ul className="banner__list">
+            {forgot.slice(0, 8).map((e) => (
+              <li key={e.user_id}>
+                {e.full_name}
+                {isHq && e.campus_name ? ` · ${e.campus_name}` : ""} — {fmt(e.since)}'den beri (
+                {Math.floor(e.minutes_overdue / 60)} sa {e.minutes_overdue % 60} dk gecikme)
+              </li>
+            ))}
+            {forgot.length > 8 && <li>… ve {forgot.length - 8} kişi daha</li>}
+          </ul>
         </div>
       )}
 

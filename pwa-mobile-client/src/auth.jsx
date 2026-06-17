@@ -123,10 +123,11 @@ export function AuthProvider({ children }) {
 
   const myLeaves = () => withAuth((t) => api.myLeaves(t));
   const requestLeave = (payload) => withAuth((t) => api.requestLeave(t, payload));
+  const myStatus = () => withAuth((t) => api.myStatus(t));
 
   return (
     <AuthContext.Provider
-      value={{ user, phase, register, recheck, logout, scan, myLeaves, requestLeave }}
+      value={{ user, phase, register, recheck, logout, scan, myLeaves, requestLeave, myStatus }}
     >
       {children}
     </AuthContext.Provider>

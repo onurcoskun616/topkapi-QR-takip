@@ -6,11 +6,27 @@ import LeaveRequest from "./LeaveRequest";
 const READER_ID = "qr-reader";
 
 export default function Scanner() {
-  const { user, logout, scan } = useAuth();
+  const { user, logout, scan, myStatus } = useAuth();
   const [mode, setMode] = useState("scan"); // scan | leave
   const [phase, setPhase] = useState("scanning"); // scanning | processing | result
   const [result, setResult] = useState(null); // { kind, message }
   const [cameraError, setCameraError] = useState(null);
+  const [checkout, setCheckout] = useState(null); // {should_check_out, minutes_overdue}
+
+  // Refresh the "still inside after shift" reminder (shown so the staff member
+  // scans out before the nightly auto-close marks the day as a system OUT).
+  const refreshStatus = useCallback(async () => {
+    try {
+      const s = await myStatus();
+      setCheckout(s && s.should_check_out ? s : null);
+    } catch {
+      /* non-critical */
+    }
+  }, [myStatus]);
+
+  useEffect(() => {
+    refreshStatus();
+  }, [refreshStatus]);
 
   const scannerRef = useRef(null);
   const lockRef = useRef(false);
@@ -48,8 +64,9 @@ export default function Scanner() {
         setResult({ kind: "error", message: err.message || "Geçersiz kod" });
       }
       setPhase("result");
+      refreshStatus();
     },
-    [scan, stopScanner]
+    [scan, stopScanner, refreshStatus]
   );
 
   // Start the camera whenever we (re)enter the scanning phase — but not while
@@ -118,6 +135,13 @@ export default function Scanner() {
           </button>
         </div>
       </header>
+
+      {checkout && phase === "scanning" && (
+        <div className="checkout-reminder">
+          Mesai bitti ama hâlâ <strong>"içeride"</strong> görünüyorsunuz. Çıkış için QR
+          okutmayı unutmayın — yoksa gün, sistem tarafından otomatik kapatılır.
+        </div>
+      )}
 
       {/* Camera viewport (html5-qrcode injects the video here) */}
       <div id={READER_ID} className="scanner__reader" />

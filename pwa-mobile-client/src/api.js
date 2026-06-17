@@ -60,6 +60,12 @@ export const api = {
   // Suggested leave/absence kinds (Ücretli/Ücretsiz izin, …) — public list.
   leaveTypes: () => fetch(`${API_BASE_URL}/api/leaves/types`).then(parse),
 
+  // Live attendance state: am I still "inside" and should I scan out?
+  myStatus: (accessToken) =>
+    fetch(`${API_BASE_URL}/api/logs/me/status`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then(parse),
+
   // Staff self-service leave: list own records and submit a new request.
   myLeaves: (accessToken) =>
     fetch(`${API_BASE_URL}/api/leaves/me`, {
