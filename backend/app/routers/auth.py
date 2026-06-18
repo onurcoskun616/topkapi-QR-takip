@@ -75,6 +75,29 @@ async def _has_active_session(db: AsyncSession, user_id: int) -> bool:
     return result.first() is not None
 
 
+async def _device_bound_to_other(
+    db: AsyncSession, device_fp_hash: str, exclude_user_id: int | None
+) -> bool:
+    """True if this device already holds an active session for a *different* user.
+
+    Enforces "one device → one identity": a single phone must not be able to
+    register/hold two different staff accounts (which would let one person clock
+    several people in/out). ``exclude_user_id`` skips the account being
+    (re-)claimed so its own soon-to-be-replaced session is not counted.
+    """
+    now = datetime.now(timezone.utc)
+    query = select(Session.id).where(
+        Session.device_fingerprint == device_fp_hash,
+        Session.revoked.is_(False),
+        Session.expires_at > now,
+    )
+    if exclude_user_id is not None:
+        query = query.where(Session.user_id != exclude_user_id)
+    result = await db.execute(query)
+    return result.first() is not None
+
+
+
 async def _issue_session(
     db: AsyncSession, user: User, device_fingerprint: str
 ) -> tuple[str, str]:
@@ -127,6 +150,21 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
 
     existing = await db.execute(select(User).where(User.phone == phone))
     user = existing.scalar_one_or_none()
+
+    # One device → one identity: refuse if this phone is already bound to a
+    # different active account (blocks registering a second person on one phone).
+    device_fp_hash = sha256_hex(payload.device_fingerprint)
+    if await _device_bound_to_other(
+        db, device_fp_hash, exclude_user_id=user.id if user is not None else None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Bu telefon zaten başka bir personele tanımlı. Her personel kendi "
+                "telefonuyla kayıt olmalıdır. Cihaz değişikliği için müdürünüzden "
+                "cihaz sıfırlaması isteyin."
+            ),
+        )
 
     if user is not None:
         if user.role != UserRole.staff or user.status == UserStatus.disabled:

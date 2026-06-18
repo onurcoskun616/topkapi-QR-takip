@@ -443,6 +443,67 @@ def test_register_requires_birth_date(client, seeded):
     assert r.status_code == 422
 
 
+# --------------------------------------------------------------------------- #
+# One device → one identity (block registering two people on the same phone)
+# --------------------------------------------------------------------------- #
+def _register_staff(client, *, phone, device_fingerprint, campus_id):
+    return client.post(
+        "/api/auth/register",
+        json={
+            "full_name": "İkinci Personel",
+            "phone": phone,
+            "job_title": "Öğretmen",
+            "branch": "Tarih",
+            "birth_date": "1992-03-15",
+            "campus_id": campus_id,
+            "device_fingerprint": device_fingerprint,
+        },
+    )
+
+
+def test_same_device_cannot_register_second_staff(client, seeded):
+    # Seeded "Ayşe Yılmaz" is bound to device "staff-fp-bbbbbbbb". A second,
+    # different person must not be able to register from that same phone.
+    r = _register_staff(
+        client,
+        phone="0532 444 55 66",
+        device_fingerprint="staff-fp-bbbbbbbb",
+        campus_id=seeded["campus_a"]["id"],
+    )
+    assert r.status_code == 409
+    assert "başka bir personele tanımlı" in r.json()["detail"]
+
+
+def test_second_staff_on_own_device_succeeds(client, seeded):
+    # The block is per-device, not global: a different person on their own phone
+    # registers normally.
+    r = _register_staff(
+        client,
+        phone="0532 444 55 66",
+        device_fingerprint="other-staff-fp-cccccccc",
+        campus_id=seeded["campus_a"]["id"],
+    )
+    assert r.status_code == 201
+
+
+def test_device_reusable_after_director_reset(client, seeded):
+    # After the director clears Ayşe's device, that phone is free to bind a new
+    # account again (recovery path for a re-used/handed-down handset).
+    r = client.post(
+        f"/api/staff/{seeded['staff_id']}/reset-device",
+        headers=seeded["dir_a_headers"],
+    )
+    assert r.status_code == 200
+
+    r = _register_staff(
+        client,
+        phone="0532 444 55 66",
+        device_fingerprint="staff-fp-bbbbbbbb",
+        campus_id=seeded["campus_a"]["id"],
+    )
+    assert r.status_code == 201
+
+
 def test_recent_scan_confirms_in_then_out(client, seeded):
     r = _scan(client, seeded)
     assert r.status_code == 200 and r.json()["type"] == "IN"
