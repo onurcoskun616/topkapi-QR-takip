@@ -90,6 +90,8 @@ export default function Reports({ isHq }) {
 
   const [late, setLate] = useState([]);
   const [early, setEarly] = useState([]);
+  const [lateList, setLateList] = useState([]);
+  const [earlyList, setEarlyList] = useState([]);
   const [summary, setSummary] = useState(null);
   const [detail, setDetail] = useState([]);
   const [trend, setTrend] = useState(null);
@@ -115,15 +117,20 @@ export default function Reports({ isHq }) {
     setBusy(true);
     setError(null);
     try {
-      const [lateRows, earlyRows, summaryRes, detailRows, trendRes] = await Promise.all([
-        api.lateRanking(token, filters),
-        api.earlyLeaveRanking(token, filters),
-        api.absenceSummary(token, filters),
-        api.absenceDetail(token, filters),
-        api.dailyTrend(token, filters),
-      ]);
+      const [lateRows, earlyRows, lateListRows, earlyListRows, summaryRes, detailRows, trendRes] =
+        await Promise.all([
+          api.lateRanking(token, filters),
+          api.earlyLeaveRanking(token, filters),
+          api.lateDetail(token, filters),
+          api.earlyLeaveDetail(token, filters),
+          api.absenceSummary(token, filters),
+          api.absenceDetail(token, filters),
+          api.dailyTrend(token, filters),
+        ]);
       setLate(lateRows);
       setEarly(earlyRows);
+      setLateList(lateListRows);
+      setEarlyList(earlyListRows);
       setSummary(summaryRes);
       setDetail(detailRows);
       setTrend(trendRes);
@@ -329,6 +336,86 @@ export default function Reports({ isHq }) {
                     {isHq && <td className="muted small">{r.campus_name || "—"}</td>}
                     <td>{r.early_leave_days}</td>
                     <td>{r.average_early_minutes}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2 className="card__title">Geç Giriş Listesi — Tarih / Saat ({lateList.length})</h2>
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Tarih</th>
+                <th>Saat</th>
+                <th>Personel</th>
+                {isHq && <th>Kampüs</th>}
+                <th>Mesai Başlangıcı</th>
+                <th>Gecikme (dk)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lateList.length === 0 ? (
+                <tr>
+                  <td colSpan={isHq ? 6 : 5} className="muted">
+                    Kayıt yok.
+                  </td>
+                </tr>
+              ) : (
+                lateList.map((e, i) => (
+                  <tr key={`${e.user_id}-${e.date}-${i}`}>
+                    <td className="muted small">{e.date}</td>
+                    <td><strong>{e.arrival_time}</strong></td>
+                    <td>{e.full_name}</td>
+                    {isHq && <td className="muted small">{e.campus_name || "—"}</td>}
+                    <td className="muted small">{e.shift_start}</td>
+                    <td>
+                      <span className="badge badge--out">{e.minutes_late} dk</span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2 className="card__title">Erken Çıkış Listesi — Tarih / Saat ({earlyList.length})</h2>
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Tarih</th>
+                <th>Saat</th>
+                <th>Personel</th>
+                {isHq && <th>Kampüs</th>}
+                <th>Mesai Bitişi</th>
+                <th>Erken (dk)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {earlyList.length === 0 ? (
+                <tr>
+                  <td colSpan={isHq ? 6 : 5} className="muted">
+                    Kayıt yok.
+                  </td>
+                </tr>
+              ) : (
+                earlyList.map((e, i) => (
+                  <tr key={`${e.user_id}-${e.date}-${i}`}>
+                    <td className="muted small">{e.date}</td>
+                    <td><strong>{e.leave_time}</strong></td>
+                    <td>{e.full_name}</td>
+                    {isHq && <td className="muted small">{e.campus_name || "—"}</td>}
+                    <td className="muted small">{e.shift_end}</td>
+                    <td>
+                      <span className="badge badge--out">{e.minutes_early} dk</span>
+                    </td>
                   </tr>
                 ))
               )}

@@ -338,6 +338,59 @@ def test_early_leave_ranking_flags_early_departure(client, seeded):
     assert any(row["user_id"] == seeded["staff_id"] for row in r.json())
 
 
+def test_late_detail_lists_each_event_with_date_and_time(client, seeded):
+    for day, t in (("2026-06-10", "08:25:00"), ("2026-06-09", "08:05:00")):
+        r = client.post(
+            "/api/logs/manual",
+            headers=seeded["dir_a_headers"],
+            json={"user_id": seeded["staff_id"], "type": "IN", "date": day, "time": t},
+        )
+        assert r.status_code == 201
+
+    r = client.get(
+        "/api/reports/late-detail",
+        headers=seeded["dir_a_headers"],
+        params={"start_date": "2026-06-01", "end_date": "2026-06-30", "threshold_minutes": 0},
+    )
+    assert r.status_code == 200
+    rows = r.json()
+    mine = [row for row in rows if row["user_id"] == seeded["staff_id"]]
+    assert len(mine) == 2
+    # Sorted chronologically by (date, time): the 09th comes before the 10th.
+    assert mine[0]["date"] == "2026-06-09" and mine[0]["arrival_time"] == "08:05"
+    assert mine[1]["date"] == "2026-06-10" and mine[1]["arrival_time"] == "08:25"
+    assert mine[1]["minutes_late"] == 25
+    assert mine[1]["shift_start"] == "08:00"
+
+
+def test_early_leave_detail_lists_each_event_with_date_and_time(client, seeded):
+    r = client.post(
+        "/api/logs/manual",
+        headers=seeded["dir_a_headers"],
+        json={"user_id": seeded["staff_id"], "type": "IN", "date": "2026-06-12", "time": "08:00:00"},
+    )
+    assert r.status_code == 201
+    r = client.post(
+        "/api/logs/manual",
+        headers=seeded["dir_a_headers"],
+        json={"user_id": seeded["staff_id"], "type": "OUT", "date": "2026-06-12", "time": "16:20:00"},
+    )
+    assert r.status_code == 201
+
+    r = client.get(
+        "/api/reports/early-leave-detail",
+        headers=seeded["dir_a_headers"],
+        params={"start_date": "2026-06-01", "end_date": "2026-06-30", "threshold_minutes": 0},
+    )
+    assert r.status_code == 200
+    mine = [row for row in r.json() if row["user_id"] == seeded["staff_id"]]
+    assert len(mine) == 1
+    assert mine[0]["date"] == "2026-06-12"
+    assert mine[0]["leave_time"] == "16:20"
+    assert mine[0]["shift_end"] == "17:00"
+    assert mine[0]["minutes_early"] == 40
+
+
 def test_absence_detail_flags_unresolved_when_no_leave_covers(client, seeded):
     r = client.get(
         "/api/reports/absences",

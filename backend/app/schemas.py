@@ -374,6 +374,33 @@ class EarlyLeaveRankingEntry(BaseModel):
     average_early_minutes: float
 
 
+class LateArrivalEntry(BaseModel):
+    """One single late arrival event (one staff member, one day), listed by
+    date + clock time rather than aggregated — so a manager can read exactly
+    who came in late, on which day, and at what time."""
+
+    user_id: int
+    full_name: str
+    campus_name: str | None = None
+    date: date
+    arrival_time: str   # local clock time of the first IN, "HH:MM"
+    shift_start: str    # campus shift start that day, "HH:MM"
+    minutes_late: int
+
+
+class EarlyLeaveEntry(BaseModel):
+    """One single early-leave event (one staff member, one day), listed by
+    date + clock time rather than aggregated."""
+
+    user_id: int
+    full_name: str
+    campus_name: str | None = None
+    date: date
+    leave_time: str     # local clock time of the last OUT, "HH:MM"
+    shift_end: str      # campus shift end that day, "HH:MM"
+    minutes_early: int
+
+
 class AbsenceDayEntry(BaseModel):
     """One staff member's status for one calendar day in the range — the
     report never silently skips a day: it is always 'present', a named leave

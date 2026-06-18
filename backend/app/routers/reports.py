@@ -39,9 +39,11 @@ from ..schemas import (
     AbsenceTotalEntry,
     DailyTrendEntry,
     DailyTrendResponse,
+    EarlyLeaveEntry,
     EarlyLeaveRankingEntry,
     ForgotCheckoutEntry,
     ForgotCheckoutResponse,
+    LateArrivalEntry,
     LateRankingEntry,
     UnresolvedReminderResponse,
 )
@@ -283,6 +285,127 @@ async def early_leave_ranking(
 
     results.sort(key=lambda r: (-r.early_leave_days, -r.average_early_minutes))
     return results[:limit]
+
+
+@router.get("/late-detail", response_model=list[LateArrivalEntry])
+async def late_detail(
+    start_date: date,
+    end_date: date,
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+    campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    user_id: int | None = None,
+    threshold_minutes: int = Query(0, ge=0, le=240, description="Grace period before counting as late"),
+    exclude_weekends: bool = True,
+    limit: int = Query(1000, ge=1, le=5000),
+):
+    """Flat, chronological list of every late arrival in the range — one row per
+    (staff, day): the day, the clock time of their first IN, the campus shift
+    start, and how many minutes late. Sorted by date then time, so it reads as a
+    diary of "who came in late, when, and at what time"."""
+    _validate_range(start_date, end_date)
+    tz = ZoneInfo(settings.attendance_timezone)
+    staff = await _scoped_active_staff(db, manager, campus_id, user_id)
+    if not staff:
+        return []
+
+    logs = await _logs_for_staff(db, [s.id for s in staff], start_date, end_date)
+    grouped = _group_by_staff_day(logs, tz)
+    campuses = await _campus_shift_map(db)
+    national_holidays, holidays_by_campus = await _load_holidays(db, start_date, end_date)
+    all_days = _all_days(start_date, end_date)
+
+    rows: list[tuple[datetime, LateArrivalEntry]] = []
+    for s in staff:
+        campus = campuses.get(s.campus_id) if s.campus_id else None
+        if campus is None or campus.shift_start is None:
+            continue  # no shift configured for this campus — cannot judge lateness
+        for d in _expected_days_for_staff(
+            s, all_days, exclude_weekends, national_holidays, holidays_by_campus
+        ):
+            bucket = grouped.get((s.id, d))
+            if bucket is None or bucket.first_in is None:
+                continue
+            shift_start_local = datetime.combine(d, campus.shift_start, tzinfo=tz)
+            minutes_late = (bucket.first_in - shift_start_local).total_seconds() / 60
+            if minutes_late > threshold_minutes:
+                rows.append(
+                    (
+                        bucket.first_in,
+                        LateArrivalEntry(
+                            user_id=s.id,
+                            full_name=s.full_name,
+                            campus_name=campus.name,
+                            date=d,
+                            arrival_time=bucket.first_in.strftime("%H:%M"),
+                            shift_start=campus.shift_start.strftime("%H:%M"),
+                            minutes_late=round(minutes_late),
+                        ),
+                    )
+                )
+
+    rows.sort(key=lambda t: t[0])  # chronological by the actual arrival instant
+    return [entry for _, entry in rows[:limit]]
+
+
+@router.get("/early-leave-detail", response_model=list[EarlyLeaveEntry])
+async def early_leave_detail(
+    start_date: date,
+    end_date: date,
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+    campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    user_id: int | None = None,
+    threshold_minutes: int = Query(0, ge=0, le=240, description="Grace period before counting as early"),
+    exclude_weekends: bool = True,
+    limit: int = Query(1000, ge=1, le=5000),
+):
+    """Flat, chronological list of every early leave in the range — one row per
+    (staff, day): the day, the clock time of their last OUT, the campus shift
+    end, and how many minutes early. Sorted by date then time."""
+    _validate_range(start_date, end_date)
+    tz = ZoneInfo(settings.attendance_timezone)
+    staff = await _scoped_active_staff(db, manager, campus_id, user_id)
+    if not staff:
+        return []
+
+    logs = await _logs_for_staff(db, [s.id for s in staff], start_date, end_date)
+    grouped = _group_by_staff_day(logs, tz)
+    campuses = await _campus_shift_map(db)
+    national_holidays, holidays_by_campus = await _load_holidays(db, start_date, end_date)
+    all_days = _all_days(start_date, end_date)
+
+    rows: list[tuple[datetime, EarlyLeaveEntry]] = []
+    for s in staff:
+        campus = campuses.get(s.campus_id) if s.campus_id else None
+        if campus is None or campus.shift_end is None:
+            continue
+        for d in _expected_days_for_staff(
+            s, all_days, exclude_weekends, national_holidays, holidays_by_campus
+        ):
+            bucket = grouped.get((s.id, d))
+            if bucket is None or bucket.last_out is None:
+                continue
+            shift_end_local = datetime.combine(d, campus.shift_end, tzinfo=tz)
+            minutes_early = (shift_end_local - bucket.last_out).total_seconds() / 60
+            if minutes_early > threshold_minutes:
+                rows.append(
+                    (
+                        bucket.last_out,
+                        EarlyLeaveEntry(
+                            user_id=s.id,
+                            full_name=s.full_name,
+                            campus_name=campus.name,
+                            date=d,
+                            leave_time=bucket.last_out.strftime("%H:%M"),
+                            shift_end=campus.shift_end.strftime("%H:%M"),
+                            minutes_early=round(minutes_early),
+                        ),
+                    )
+                )
+
+    rows.sort(key=lambda t: t[0])  # chronological by the actual leave instant
+    return [entry for _, entry in rows[:limit]]
 
 
 async def _compute_absences(
@@ -613,6 +736,12 @@ async def export_reports_xlsx(
     early = await early_leave_ranking(
         start_date, end_date, manager, db, campus_id, None, threshold_minutes, exclude_weekends, 700
     )
+    late_list = await late_detail(
+        start_date, end_date, manager, db, campus_id, None, threshold_minutes, exclude_weekends, 5000
+    )
+    early_list = await early_leave_detail(
+        start_date, end_date, manager, db, campus_id, None, threshold_minutes, exclude_weekends, 5000
+    )
     absences = await _compute_absences(db, manager, start_date, end_date, campus_id, None, exclude_weekends)
     summary = await absence_summary(start_date, end_date, manager, db, campus_id, exclude_weekends)
 
@@ -628,6 +757,20 @@ async def export_reports_xlsx(
     ws2.append(["Personel", "Kampüs", "Erken Çıktığı Gün Sayısı", "Ortalama Erken Çıkma (dk)"])
     for r in early:
         ws2.append([r.full_name, r.campus_name or "", r.early_leave_days, r.average_early_minutes])
+
+    ws_ld = wb.create_sheet("Geç Giriş Listesi")
+    ws_ld.append(["Tarih", "Saat", "Personel", "Kampüs", "Mesai Başlangıcı", "Gecikme (dk)"])
+    for e in late_list:
+        ws_ld.append(
+            [e.date.isoformat(), e.arrival_time, e.full_name, e.campus_name or "", e.shift_start, e.minutes_late]
+        )
+
+    ws_ed = wb.create_sheet("Erken Çıkış Listesi")
+    ws_ed.append(["Tarih", "Saat", "Personel", "Kampüs", "Mesai Bitişi", "Erken (dk)"])
+    for e in early_list:
+        ws_ed.append(
+            [e.date.isoformat(), e.leave_time, e.full_name, e.campus_name or "", e.shift_end, e.minutes_early]
+        )
 
     ws3 = wb.create_sheet("Devamsızlık Detay")
     ws3.append(["Personel", "Kampüs", "Tarih", "Durum"])

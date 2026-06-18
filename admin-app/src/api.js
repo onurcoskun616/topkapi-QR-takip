@@ -227,6 +227,30 @@ export const api = {
       { token }
     ),
 
+  lateDetail: (token, { startDate, endDate, campusId, thresholdMinutes, excludeWeekends } = {}) =>
+    request(
+      `/api/reports/late-detail${qs({
+        start_date: startDate,
+        end_date: endDate,
+        campus_id: campusId,
+        threshold_minutes: thresholdMinutes,
+        exclude_weekends: excludeWeekends,
+      })}`,
+      { token }
+    ),
+
+  earlyLeaveDetail: (token, { startDate, endDate, campusId, thresholdMinutes, excludeWeekends } = {}) =>
+    request(
+      `/api/reports/early-leave-detail${qs({
+        start_date: startDate,
+        end_date: endDate,
+        campus_id: campusId,
+        threshold_minutes: thresholdMinutes,
+        exclude_weekends: excludeWeekends,
+      })}`,
+      { token }
+    ),
+
   absenceDetail: (token, { startDate, endDate, campusId, userId, excludeWeekends } = {}) =>
     request(
       `/api/reports/absences${qs({
