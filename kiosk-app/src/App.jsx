@@ -3,6 +3,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { fetchQrToken, fetchRecentScans } from "./api";
 import BirthdayOverlay from "./BirthdayOverlay";
 import ScanResult from "./ScanResult";
+import logo from "./assets/logo.png";
 
 // The kiosk learns which campus it belongs to from the tablet URL, e.g.
 // https://kiosk.okulunuz.com/?campus=3  — needed so the tablet only confirms
@@ -200,7 +201,7 @@ export default function App() {
       {current?.kind === "scan" && (
         <ScanResult name={current.name} type={current.type} onDone={dismiss} />
       )}
-      <div className="kiosk__logo" aria-hidden="true">TO</div>
+      <img className="kiosk__logo" src={logo} alt="Topkapı Okulları" />
       <h1 className="kiosk__title">Topkapı Okulları</h1>
       <p className="kiosk__subtitle">
         Giriş / Çıkış için telefonunuzla QR kodu okutun

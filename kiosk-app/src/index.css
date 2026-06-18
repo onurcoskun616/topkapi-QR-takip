@@ -41,16 +41,9 @@ body {
 }
 
 .kiosk__logo {
-  width: clamp(48px, 6vw, 72px);
-  height: clamp(48px, 6vw, 72px);
-  border-radius: 50%;
-  border: 3px solid var(--accent);
-  color: var(--accent);
-  display: grid;
-  place-items: center;
-  font-size: clamp(1.2rem, 2.6vw, 1.9rem);
-  font-weight: 800;
-  letter-spacing: 1px;
+  width: clamp(56px, 7vw, 88px);
+  height: auto;
+  object-fit: contain;
 }
 
 .kiosk__title {
