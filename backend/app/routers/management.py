@@ -40,10 +40,21 @@ async def _campus_names(db: AsyncSession) -> dict[int, str]:
 
 
 async def _users_with_device(db: AsyncSession, user_ids: list[int]) -> set[int]:
-    """Subset of the given users that currently have a live device session."""
+    """Subset of the given users currently bound to a device.
+
+    A staff account is "device-bound" if it has a persistent binding
+    (``User.device_fp_hash``) or a still-live session — either makes the manager's
+    "Cihazı Sıfırla" action meaningful.
+    """
     if not user_ids:
         return set()
     now = datetime.now(timezone.utc)
+    bound = await db.execute(
+        select(User.id).where(
+            User.id.in_(user_ids), User.device_fp_hash.is_not(None)
+        )
+    )
+    result = {uid for (uid,) in bound.all()}
     rows = await db.execute(
         select(Session.user_id)
         .where(
@@ -53,7 +64,8 @@ async def _users_with_device(db: AsyncSession, user_ids: list[int]) -> set[int]:
         )
         .distinct()
     )
-    return {uid for (uid,) in rows.all()}
+    result.update(uid for (uid,) in rows.all())
+    return result
 
 
 # --------------------------------------------------------------------------- #
@@ -208,6 +220,7 @@ async def disable_staff(
     """Deactivate an account and drop its device session (full lock-out)."""
     staff = await load_scoped_staff(db, manager, staff_id)
     staff.status = UserStatus.disabled
+    staff.device_fp_hash = None  # free the device binding (full unbind)
     await db.execute(delete(Session).where(Session.user_id == staff.id))
     await db.commit()
     names = await _campus_names(db)
@@ -227,6 +240,7 @@ async def reset_device(
     and re-registers with the *same* phone number to bind it.
     """
     staff = await load_scoped_staff(db, manager, staff_id)
+    staff.device_fp_hash = None  # clear persistent binding so a new device can bind
     await db.execute(delete(Session).where(Session.user_id == staff.id))
     await db.commit()
     names = await _campus_names(db)

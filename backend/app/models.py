@@ -133,6 +133,16 @@ class User(Base):
     # Only managers may set this (görev rolü), via PATCH /api/staff/{id}.
     working_days: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # SHA-256 of the device fingerprint this staff account is permanently bound
+    # to (set when the phone first binds a device at registration). Re-registering
+    # the same phone number from a *different* device is refused unless a manager
+    # clears this ("Cihazı Sıfırla"). Managers leave it NULL (they use passwords).
+    # Persisted on the account — not only on the session — so the binding survives
+    # logout/expiry and a phone number alone can never be re-claimed elsewhere.
+    device_fp_hash: Mapped[str | None] = mapped_column(
+        String(64), index=True, nullable=True
+    )
+
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="user_role"), default=UserRole.staff, nullable=False
     )

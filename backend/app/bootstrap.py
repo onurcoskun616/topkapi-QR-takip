@@ -33,6 +33,7 @@ async def create_tables() -> None:
 _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("users", "birth_date", "DATE"),
     ("users", "working_days", "VARCHAR(20)"),
+    ("users", "device_fp_hash", "VARCHAR(64)"),
     ("leave_records", "decided_by_id", "INTEGER"),
     ("leave_records", "decided_at", "TIMESTAMP WITH TIME ZONE"),
 ]

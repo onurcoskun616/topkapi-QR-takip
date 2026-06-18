@@ -504,6 +504,52 @@ def test_device_reusable_after_director_reset(client, seeded):
     assert r.status_code == 201
 
 
+SEEDED_STAFF_PHONE = "0532 111 22 33"
+
+
+def test_existing_phone_new_device_rejected(client, seeded):
+    # Knowing Ayşe's phone number is NOT enough: re-registering it from a
+    # different device must be refused (both phone AND device must match).
+    r = _register_staff(
+        client,
+        phone=SEEDED_STAFF_PHONE,
+        device_fingerprint="attacker-device-zzzz",
+        campus_id=seeded["campus_a"]["id"],
+    )
+    assert r.status_code == 409
+    assert "başka bir cihaza tanımlı" in r.json()["detail"]
+
+
+def test_existing_phone_same_device_reaccepted(client, seeded):
+    # The genuine owner re-opening the app on the *same* device (e.g. reinstall)
+    # is accepted and simply re-issued a session.
+    r = _register_staff(
+        client,
+        phone=SEEDED_STAFF_PHONE,
+        device_fingerprint="staff-fp-bbbbbbbb",
+        campus_id=seeded["campus_a"]["id"],
+    )
+    assert r.status_code == 201
+
+
+def test_existing_phone_new_device_allowed_after_reset(client, seeded):
+    # A genuine phone change: the manager resets the device, then the same phone
+    # number binds the new device.
+    r = client.post(
+        f"/api/staff/{seeded['staff_id']}/reset-device",
+        headers=seeded["dir_a_headers"],
+    )
+    assert r.status_code == 200
+
+    r = _register_staff(
+        client,
+        phone=SEEDED_STAFF_PHONE,
+        device_fingerprint="ayse-new-phone-yyyy",
+        campus_id=seeded["campus_a"]["id"],
+    )
+    assert r.status_code == 201
+
+
 def test_recent_scan_confirms_in_then_out(client, seeded):
     r = _scan(client, seeded)
     assert r.status_code == 200 and r.json()["type"] == "IN"

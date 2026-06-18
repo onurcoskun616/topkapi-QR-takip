@@ -62,39 +62,55 @@ async def _campus_name(db: AsyncSession, campus_id: int | None) -> str | None:
     return campus.name if campus else None
 
 
-async def _has_active_session(db: AsyncSession, user_id: int) -> bool:
-    """True if the account currently has a non-expired, non-revoked device bound."""
-    now = datetime.now(timezone.utc)
-    result = await db.execute(
-        select(Session.id).where(
-            Session.user_id == user_id,
-            Session.revoked.is_(False),
-            Session.expires_at > now,
-        )
-    )
-    return result.first() is not None
-
-
-async def _device_bound_to_other(
+async def _device_belongs_to_other(
     db: AsyncSession, device_fp_hash: str, exclude_user_id: int | None
 ) -> bool:
-    """True if this device already holds an active session for a *different* user.
+    """True if this device is already tied to a *different* account.
 
-    Enforces "one device → one identity": a single phone must not be able to
-    register/hold two different staff accounts (which would let one person clock
-    several people in/out). ``exclude_user_id`` skips the account being
-    (re-)claimed so its own soon-to-be-replaced session is not counted.
+    Enforces "one device → one employee": a single phone must not be usable to
+    register/operate two people. We check both the persistent binding on the
+    account (``User.device_fp_hash``) and any live session — the latter also
+    covers accounts bound before the persistent field existed. ``exclude_user_id``
+    skips the account currently (re-)claiming this same device.
     """
+    user_query = select(User.id).where(User.device_fp_hash == device_fp_hash)
+    if exclude_user_id is not None:
+        user_query = user_query.where(User.id != exclude_user_id)
+    if (await db.execute(user_query)).first() is not None:
+        return True
+
     now = datetime.now(timezone.utc)
-    query = select(Session.id).where(
+    session_query = select(Session.id).where(
         Session.device_fingerprint == device_fp_hash,
         Session.revoked.is_(False),
         Session.expires_at > now,
     )
     if exclude_user_id is not None:
-        query = query.where(Session.user_id != exclude_user_id)
-    result = await db.execute(query)
-    return result.first() is not None
+        session_query = session_query.where(Session.user_id != exclude_user_id)
+    return (await db.execute(session_query)).first() is not None
+
+
+async def _bound_device(db: AsyncSession, user: User) -> str | None:
+    """The device fingerprint hash this account is bound to, or None.
+
+    Prefers the persistent ``User.device_fp_hash``; falls back to a live session's
+    fingerprint so accounts bound before the persistent field existed are still
+    protected (and get back-filled on their next registration).
+    """
+    if user.device_fp_hash:
+        return user.device_fp_hash
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(Session.device_fingerprint)
+        .where(
+            Session.user_id == user.id,
+            Session.revoked.is_(False),
+            Session.expires_at > now,
+        )
+        .limit(1)
+    )
+    row = result.first()
+    return row[0] if row else None
 
 
 
@@ -128,13 +144,18 @@ async def _issue_session(
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    """Staff self-registration (and new-phone re-claim) — passwordless.
+    """Staff self-registration (and first-time device binding) — passwordless.
 
-    * New phone number  → create a ``pending`` account on the chosen campus.
-    * Known phone number with **no** bound device (a director reset it) →
-      re-bind this device to the existing identity, keeping history & approval.
-    * Known phone number that is still bound to a device → refuse; the staff
-      member must ask their director to reset the old phone first.
+    Identity = phone number **and** device, both of which must match:
+
+    * New phone number  → create a ``pending`` account and bind this device.
+    * Known phone number **not yet bound** to a device (fresh / bulk-imported, or
+      a manager reset it) → bind this device, keeping history & approval.
+    * Known phone number already bound to **this same** device → re-issue (e.g.
+      the app was reinstalled).
+    * Known phone number bound to a **different** device → refuse; only a manager's
+      "Cihazı Sıfırla" frees the account for a new phone. This stops anyone from
+      claiming someone else's identity just by knowing their phone number.
     """
     campus = await db.get(Campus, payload.campus_id)
     if campus is None:
@@ -151,16 +172,16 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
     existing = await db.execute(select(User).where(User.phone == phone))
     user = existing.scalar_one_or_none()
 
-    # One device → one identity: refuse if this phone is already bound to a
-    # different active account (blocks registering a second person on one phone).
+    # One device → one employee: refuse if this device is already tied to a
+    # different account (blocks registering/operating a second person on one phone).
     device_fp_hash = sha256_hex(payload.device_fingerprint)
-    if await _device_bound_to_other(
+    if await _device_belongs_to_other(
         db, device_fp_hash, exclude_user_id=user.id if user is not None else None
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Bu telefon zaten başka bir personele tanımlı. Her personel kendi "
+                "Bu cihaz zaten başka bir personele tanımlı. Her personel kendi "
                 "telefonuyla kayıt olmalıdır. Cihaz değişikliği için müdürünüzden "
                 "cihaz sıfırlaması isteyin."
             ),
@@ -172,7 +193,10 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Bu telefon numarası kullanılamıyor. Müdürünüze başvurun.",
             )
-        if await _has_active_session(db, user.id):
+        # Both must match: if this account is already bound to a device, only the
+        # *same* device may re-register. A different one needs a manager reset.
+        bound = await _bound_device(db, user)
+        if bound is not None and bound != device_fp_hash:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
@@ -180,7 +204,8 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
                     "için müdürünüzden cihaz sıfırlaması isteyin."
                 ),
             )
-        # Re-claim: same identity, new device. Keep approval status & campus.
+        # Re-claim / re-bind this device. Keep approval status & campus.
+        user.device_fp_hash = device_fp_hash
         # Backfill the birth date if the original record predates this field.
         if user.birth_date is None:
             user.birth_date = payload.birth_date
@@ -194,6 +219,7 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
             role=UserRole.staff,
             status=UserStatus.pending,
             campus_id=campus.id,
+            device_fp_hash=device_fp_hash,
         )
         db.add(user)
         await db.flush()  # assigns user.id
