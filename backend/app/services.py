@@ -97,6 +97,45 @@ def normalize_phone(raw: str) -> str:
     return digits
 
 
+_TR_MOBILE_RE = re.compile(r"^\+905\d{9}$")
+
+
+def validate_phone(normalized: str) -> bool:
+    """True if a *normalized* phone is a well-formed Turkish mobile number
+    (``+90`` + 10 digits, starting with ``5``)."""
+    return bool(_TR_MOBILE_RE.fullmatch(normalized))
+
+
+def describe_phone_error(normalized: str) -> str | None:
+    """A Turkish, length-aware warning for a malformed phone, or ``None`` if it
+    is a valid Turkish mobile number. Distinguishes "too few" / "too many"
+    digits so the registration form can tell the user exactly what's wrong."""
+    if validate_phone(normalized):
+        return None
+    local = normalized[3:] if normalized.startswith("+90") else normalized.lstrip("+0")
+    if len(local) < 10:
+        return f"Telefon numarası eksik: {len(local)} hane girildi, 10 hane olmalı (05XX XXX XX XX)."
+    if len(local) > 10:
+        return f"Telefon numarası fazla karakter içeriyor: {len(local)} hane girildi, 10 hane olmalı (05XX XXX XX XX)."
+    return "Geçersiz telefon numarası. 05XX XXX XX XX biçiminde bir cep telefonu numarası girin."
+
+
+def validate_tc_kimlik(value: str) -> bool:
+    """Standard Turkish TC Kimlik No checksum (11 digits, first digit non-zero):
+
+    * digit 10 = ((sum of digits 1,3,5,7,9) * 7 − sum of digits 2,4,6,8) mod 10
+    * digit 11 = (sum of digits 1..10) mod 10
+    """
+    if not value or not value.isdigit() or len(value) != 11 or value[0] == "0":
+        return False
+    d = [int(c) for c in value]
+    odd_sum = d[0] + d[2] + d[4] + d[6] + d[8]
+    even_sum = d[1] + d[3] + d[5] + d[7]
+    if (odd_sum * 7 - even_sum) % 10 != d[9]:
+        return False
+    return sum(d[:10]) % 10 == d[10]
+
+
 def day_bounds_utc(local_date: date) -> tuple[datetime, datetime]:
     """Return [start, end] of the given local calendar date, expressed in UTC."""
     tz = ZoneInfo(settings.attendance_timezone)

@@ -9,6 +9,8 @@ matter when the suite runs.
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import pytest
+
 
 def _today_local():
     return datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Istanbul")).date()
@@ -541,6 +543,7 @@ def test_register_requires_birth_date(client, seeded):
             "phone": "0532 999 88 77",
             "job_title": "Öğretmen",
             "branch": "Fizik",
+            "tc_kimlik_no": "22222222084",
             "campus_id": seeded["campus_a"]["id"],
             "device_fingerprint": "missing-bday-fp",
         },
@@ -551,7 +554,7 @@ def test_register_requires_birth_date(client, seeded):
 # --------------------------------------------------------------------------- #
 # One device → one identity (block registering two people on the same phone)
 # --------------------------------------------------------------------------- #
-def _register_staff(client, *, phone, device_fingerprint, campus_id):
+def _register_staff(client, *, phone, device_fingerprint, campus_id, tc_kimlik_no="33333333026"):
     return client.post(
         "/api/auth/register",
         json={
@@ -560,6 +563,7 @@ def _register_staff(client, *, phone, device_fingerprint, campus_id):
             "job_title": "Öğretmen",
             "branch": "Tarih",
             "birth_date": "1992-03-15",
+            "tc_kimlik_no": tc_kimlik_no,
             "campus_id": campus_id,
             "device_fingerprint": device_fingerprint,
         },
@@ -610,6 +614,7 @@ def test_device_reusable_after_director_reset(client, seeded):
 
 
 SEEDED_STAFF_PHONE = "0532 111 22 33"
+SEEDED_STAFF_TC_KIMLIK_NO = "11111111042"
 
 
 def test_existing_phone_new_device_rejected(client, seeded):
@@ -620,6 +625,7 @@ def test_existing_phone_new_device_rejected(client, seeded):
         phone=SEEDED_STAFF_PHONE,
         device_fingerprint="attacker-device-zzzz",
         campus_id=seeded["campus_a"]["id"],
+        tc_kimlik_no=SEEDED_STAFF_TC_KIMLIK_NO,
     )
     assert r.status_code == 409
     assert "başka bir cihaza tanımlı" in r.json()["detail"]
@@ -633,6 +639,7 @@ def test_existing_phone_same_device_reaccepted(client, seeded):
         phone=SEEDED_STAFF_PHONE,
         device_fingerprint="staff-fp-bbbbbbbb",
         campus_id=seeded["campus_a"]["id"],
+        tc_kimlik_no=SEEDED_STAFF_TC_KIMLIK_NO,
     )
     assert r.status_code == 201
 
@@ -651,8 +658,69 @@ def test_existing_phone_new_device_allowed_after_reset(client, seeded):
         phone=SEEDED_STAFF_PHONE,
         device_fingerprint="ayse-new-phone-yyyy",
         campus_id=seeded["campus_a"]["id"],
+        tc_kimlik_no=SEEDED_STAFF_TC_KIMLIK_NO,
     )
     assert r.status_code == 201
+
+
+def test_existing_phone_wrong_tc_kimlik_rejected(client, seeded):
+    # Even on the *same* device, a TC kimlik no that doesn't match the one on
+    # file for this phone number is refused — the third leg of the match.
+    r = _register_staff(
+        client,
+        phone=SEEDED_STAFF_PHONE,
+        device_fingerprint="staff-fp-bbbbbbbb",
+        campus_id=seeded["campus_a"]["id"],
+        tc_kimlik_no="22222222084",
+    )
+    assert r.status_code == 409
+    assert "TC kimlik" in r.json()["detail"]
+
+
+def test_tc_kimlik_no_already_used_by_another_phone_rejected(client, seeded):
+    # Reusing someone else's TC kimlik no on a brand-new phone+device is refused
+    # — stops impersonating an existing employee's identity on another line.
+    r = _register_staff(
+        client,
+        phone="0532 444 55 66",
+        device_fingerprint="other-staff-fp-cccccccc",
+        campus_id=seeded["campus_a"]["id"],
+        tc_kimlik_no=SEEDED_STAFF_TC_KIMLIK_NO,
+    )
+    assert r.status_code == 409
+    assert "TC kimlik" in r.json()["detail"]
+
+
+def test_invalid_tc_kimlik_checksum_rejected(client, seeded):
+    # A syntactically 11-digit but checksum-invalid TC kimlik no fails request
+    # validation before any business logic runs.
+    r = _register_staff(
+        client,
+        phone="0532 444 55 66",
+        device_fingerprint="other-staff-fp-cccccccc",
+        campus_id=seeded["campus_a"]["id"],
+        tc_kimlik_no="12345678901",
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "phone",
+    [
+        "0532 44 55",       # too short
+        "0532 444 55 66 77",  # too long
+        "0632 444 55 66",   # doesn't start with 5 after the trunk prefix
+    ],
+)
+def test_malformed_phone_rejected_with_warning(client, seeded, phone):
+    r = _register_staff(
+        client,
+        phone=phone,
+        device_fingerprint="some-new-device-fp",
+        campus_id=seeded["campus_a"]["id"],
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"]
 
 
 def test_recent_scan_confirms_in_then_out(client, seeded):
@@ -784,6 +852,7 @@ def test_reset_staff_preview_changes_nothing_then_confirm_wipes_staff(client, se
             "job_title": "Öğretmen",
             "branch": "Matematik",
             "birth_date": "1990-05-20",
+            "tc_kimlik_no": "11111111042",
             "campus_id": seeded["campus_a"]["id"],
             "device_fingerprint": "staff-fp-bbbbbbbb",
         },

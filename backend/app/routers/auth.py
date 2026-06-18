@@ -3,10 +3,12 @@
 Two credential models share one device-bound, dual-token session system:
 
   * **Staff (personnel)** — passwordless. They self-register from the PWA with
-    their profile + phone number; that phone number is their permanent identity
-    and the registering device is locked to it. New accounts start ``pending``
-    until a campus director approves them. A new phone can only re-claim the
-    identity after a director clears the old device ("cihaz sıfırlama").
+    their profile + phone number + TC kimlik no; the phone number is their
+    permanent identity, and the registering device + TC kimlik no are both
+    locked to it. New accounts start ``pending`` until a campus director
+    approves them. A new phone can only re-claim the identity after a director
+    clears the old device ("cihaz sıfırlama"), and the TC kimlik no submitted
+    must always match the one already on file.
   * **Managers (director / hq)** — classic email + password login.
 
 Both paths then use:
@@ -44,7 +46,7 @@ from ..security import (
     verify_password,
 )
 from ..serializers import to_user_response
-from ..services import normalize_phone
+from ..services import describe_phone_error, normalize_phone
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -146,16 +148,19 @@ async def _issue_session(
 async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """Staff self-registration (and first-time device binding) — passwordless.
 
-    Identity = phone number **and** device, both of which must match:
+    Identity = phone number, TC kimlik no, **and** device — all three must
+    agree with what's already on file:
 
-    * New phone number  → create a ``pending`` account and bind this device.
+    * New phone number  → create a ``pending`` account and bind TC kimlik + device.
     * Known phone number **not yet bound** to a device (fresh / bulk-imported, or
-      a manager reset it) → bind this device, keeping history & approval.
-    * Known phone number already bound to **this same** device → re-issue (e.g.
-      the app was reinstalled).
-    * Known phone number bound to a **different** device → refuse; only a manager's
-      "Cihazı Sıfırla" frees the account for a new phone. This stops anyone from
-      claiming someone else's identity just by knowing their phone number.
+      a manager reset it) → bind TC kimlik + this device, keeping history & approval.
+    * Known phone number already bound to **this same** device and TC kimlik →
+      re-issue (e.g. the app was reinstalled).
+    * Known phone number bound to a **different** device, or a TC kimlik that
+      doesn't match the one on file → refuse; only a manager's "Cihazı Sıfırla"
+      frees the account. This stops anyone from claiming someone else's identity
+      just by knowing their phone number, and stops a stolen/guessed TC kimlik
+      from being reused on a different phone+device.
     """
     campus = await db.get(Campus, payload.campus_id)
     if campus is None:
@@ -164,13 +169,28 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         )
 
     phone = normalize_phone(payload.phone)
-    if len(phone) < 7:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz telefon numarası."
-        )
+    phone_error = describe_phone_error(phone)
+    if phone_error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=phone_error)
+    tc_kimlik_no = payload.tc_kimlik_no
 
     existing = await db.execute(select(User).where(User.phone == phone))
     user = existing.scalar_one_or_none()
+
+    # One TC kimlik no → one employee: refuse if this national ID is already
+    # tied to a *different* account (blocks reusing someone else's identity
+    # number on a new phone/device).
+    tc_query = select(User.id).where(User.tc_kimlik_no == tc_kimlik_no)
+    if user is not None:
+        tc_query = tc_query.where(User.id != user.id)
+    if (await db.execute(tc_query)).first() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Bu TC kimlik numarası başka bir hesaba kayıtlı. Müdürünüze "
+                "başvurun."
+            ),
+        )
 
     # One device → one employee: refuse if this device is already tied to a
     # different account (blocks registering/operating a second person on one phone).
@@ -204,9 +224,22 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
                     "için müdürünüzden cihaz sıfırlaması isteyin."
                 ),
             )
+        # TC kimlik must also agree with the one already on file — the third
+        # leg of the phone + TC kimlik + device match.
+        if user.tc_kimlik_no is not None and user.tc_kimlik_no != tc_kimlik_no:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Bu telefon numarası başka bir TC kimlik numarasına kayıtlı. "
+                    "Müdürünüze başvurun."
+                ),
+            )
         # Re-claim / re-bind this device. Keep approval status & campus.
         user.device_fp_hash = device_fp_hash
-        # Backfill the birth date if the original record predates this field.
+        # Backfill fields that predate this record (bulk-imported, or before
+        # the field existed) instead of overwriting an already-set value.
+        if user.tc_kimlik_no is None:
+            user.tc_kimlik_no = tc_kimlik_no
         if user.birth_date is None:
             user.birth_date = payload.birth_date
     else:
@@ -216,6 +249,7 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
             job_title=payload.job_title.strip(),
             branch=payload.branch.strip(),
             birth_date=payload.birth_date,
+            tc_kimlik_no=tc_kimlik_no,
             role=UserRole.staff,
             status=UserStatus.pending,
             campus_id=campus.id,

@@ -76,6 +76,7 @@ def test_bulk_import_then_self_register_binds_device(client, seeded):
             "job_title": "Öğretmen",
             "branch": "Müzik",
             "birth_date": "1992-03-03",
+            "tc_kimlik_no": "44444444068",
             "campus_id": seeded["campus_a"]["id"],
             "device_fingerprint": "zeynep-fp-12345678",
         },

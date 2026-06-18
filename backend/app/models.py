@@ -122,6 +122,12 @@ class User(Base):
     # Staff-only profile fields collected at self-registration.
     job_title: Mapped[str | None] = mapped_column(String(80), nullable=True)   # görev
     branch: Mapped[str | None] = mapped_column(String(80), nullable=True)      # branş
+    # Turkish national identity number (TC Kimlik No), collected at self-
+    # registration as a third binding factor alongside phone + device: a
+    # mismatch with the value already on file blocks the attempt (see
+    # auth.py register()), making it harder to take over an identity by only
+    # knowing/guessing the phone number. Managers leave it NULL.
+    tc_kimlik_no: Mapped[str | None] = mapped_column(String(11), nullable=True)
     # Birth date (staff self-registration). Only the month/day is used, to wish
     # the person a happy birthday on the kiosk when they scan in.
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -173,6 +179,8 @@ class User(Base):
     __table_args__ = (
         # One device → one employee, enforced at the database level.
         Index("uq_users_device_fp_hash", "device_fp_hash", unique=True),
+        # One TC kimlik no → one employee, same rationale as the device index.
+        Index("uq_users_tc_kimlik_no", "tc_kimlik_no", unique=True),
     )
 
 

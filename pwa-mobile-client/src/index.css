@@ -92,6 +92,12 @@ body {
   color: var(--muted);
   text-align: left;
 }
+.field-hint {
+  margin-top: -8px;
+  font-size: 0.78rem;
+  color: #ffd766;
+  text-align: left;
+}
 
 /* ---- Buttons ---- */
 .btn {

@@ -11,6 +11,7 @@ from .models import (
     UserRole,
     UserStatus,
 )
+from .services import validate_tc_kimlik
 
 
 # --------------------------------------------------------------------------- #
@@ -45,8 +46,18 @@ class RegisterRequest(BaseModel):
     job_title: str = Field(min_length=2, max_length=80)   # görev
     branch: str = Field(min_length=1, max_length=80)      # branş
     birth_date: date                                      # doğum tarihi
+    # TC Kimlik No — a third identity factor cross-checked against phone +
+    # device at registration, so an account can't be taken over by knowing
+    # only the phone number.
+    tc_kimlik_no: str = Field(min_length=11, max_length=11)
     campus_id: int
     device_fingerprint: str = Field(min_length=8, max_length=256)
+
+    @model_validator(mode="after")
+    def _check_tc_kimlik(self):
+        if not validate_tc_kimlik(self.tc_kimlik_no):
+            raise ValueError("Geçersiz TC kimlik numarası.")
+        return self
 
 
 class LoginRequest(BaseModel):

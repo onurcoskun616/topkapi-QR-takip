@@ -5,11 +5,55 @@ import { api } from "../api";
 const EMPTY = {
   full_name: "",
   phone: "",
+  tc_kimlik_no: "",
   job_title: "",
   branch: "",
   birth_date: "",
   campus_id: "",
 };
+
+// Turkish mobile number: a leading 0/+90 plus 10 digits starting with 5. Warns
+// with the exact digit count so "too few" and "too many" read differently.
+function phoneWarning(raw) {
+  if (!raw) return null;
+  let digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("90") && digits.length > 10) digits = digits.slice(2);
+  if (digits.startsWith("0")) digits = digits.slice(1);
+  if (digits.length < 10) {
+    return `Telefon numarası eksik: ${digits.length}/10 hane girildi.`;
+  }
+  if (digits.length > 10) {
+    return `Telefon numarası fazla karakter içeriyor: ${digits.length}/10 hane girildi.`;
+  }
+  if (digits[0] !== "5") {
+    return "05XX XXX XX XX biçiminde bir cep telefonu numarası girin.";
+  }
+  return null;
+}
+
+// Standard TC Kimlik No checksum: digit 10 from the weighted odd/even digit
+// sums, digit 11 from the sum of the first ten digits.
+function tcKimlikValid(tc) {
+  if (!/^[1-9]\d{10}$/.test(tc)) return false;
+  const d = tc.split("").map(Number);
+  const oddSum = d[0] + d[2] + d[4] + d[6] + d[8];
+  const evenSum = d[1] + d[3] + d[5] + d[7];
+  if ((oddSum * 7 - evenSum) % 10 !== d[9]) return false;
+  return d.slice(0, 10).reduce((a, b) => a + b, 0) % 10 === d[10];
+}
+
+function tcKimlikWarning(raw) {
+  if (!raw) return null;
+  if (!/^\d+$/.test(raw)) return "TC kimlik numarası sadece rakam içermelidir.";
+  if (raw.length < 11) {
+    return `TC kimlik numarası eksik: ${raw.length}/11 hane girildi.`;
+  }
+  if (raw.length > 11) {
+    return `TC kimlik numarası fazla karakter içeriyor: ${raw.length}/11 hane girildi.`;
+  }
+  if (!tcKimlikValid(raw)) return "Geçersiz TC kimlik numarası.";
+  return null;
+}
 
 export default function Register() {
   const { register } = useAuth();
@@ -27,17 +71,29 @@ export default function Register() {
 
   const onChange = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
+  const phoneHint = phoneWarning(form.phone);
+  const tcHint = tcKimlikWarning(form.tc_kimlik_no);
+
   const onSubmit = async (e) => {
     e.preventDefault();
     if (
       !form.full_name ||
       !form.phone ||
+      !form.tc_kimlik_no ||
       !form.job_title ||
       !form.branch ||
       !form.birth_date ||
       !form.campus_id
     ) {
       setError("Lütfen tüm alanları doldurun.");
+      return;
+    }
+    if (phoneHint) {
+      setError(phoneHint);
+      return;
+    }
+    if (tcHint) {
+      setError(tcHint);
       return;
     }
     setBusy(true);
@@ -75,6 +131,18 @@ export default function Register() {
           onChange={onChange("phone")}
           disabled={busy}
         />
+        {phoneHint && <p className="field-hint">{phoneHint}</p>}
+        <input
+          className="input"
+          type="text"
+          inputMode="numeric"
+          maxLength={11}
+          placeholder="TC Kimlik No"
+          value={form.tc_kimlik_no}
+          onChange={onChange("tc_kimlik_no")}
+          disabled={busy}
+        />
+        {tcHint && <p className="field-hint">{tcHint}</p>}
         <input
           className="input"
           placeholder="Görev (örn. Öğretmen, İdari)"
@@ -122,8 +190,9 @@ export default function Register() {
 
         <p className="muted login__hint">
           Kaydınız kampüs müdürünüzün onayına gönderilir. Onaylandıktan sonra bu
-          telefon kalıcı kimliğiniz olur; ertesi günler uygulama doğrudan kamerayı
-          açar. Telefon değiştirirseniz müdürünüzden sıfırlama isteyin.
+          telefon, TC kimlik no ve cihaz birlikte kalıcı kimliğiniz olur; ertesi
+          günler uygulama doğrudan kamerayı açar. Telefon veya cihaz
+          değiştirirseniz müdürünüzden sıfırlama isteyin.
         </p>
       </form>
     </div>

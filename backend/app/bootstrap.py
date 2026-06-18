@@ -34,8 +34,16 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("users", "birth_date", "DATE"),
     ("users", "working_days", "VARCHAR(20)"),
     ("users", "device_fp_hash", "VARCHAR(64)"),
+    ("users", "tc_kimlik_no", "VARCHAR(11)"),
     ("leave_records", "decided_by_id", "INTEGER"),
     ("leave_records", "decided_at", "TIMESTAMP WITH TIME ZONE"),
+]
+
+# Unique indexes introduced after ``users`` was first created: (table, column,
+# index name). Each enforces a "one value → one employee" identity rule.
+_UNIQUE_INDEX_MIGRATIONS: list[tuple[str, str, str]] = [
+    ("users", "device_fp_hash", "uq_users_device_fp_hash"),
+    ("users", "tc_kimlik_no", "uq_users_tc_kimlik_no"),
 ]
 
 # Enum values added after a PostgreSQL enum type was first created. ``create_all``
@@ -70,40 +78,39 @@ def _apply_index_migrations(sync_conn) -> None:
     """Add unique indexes introduced after a table was first created.
 
     ``create_all`` never alters an existing table, so a uniqueness rule added to
-    a model later (here: ``users.device_fp_hash`` → "one device, one employee")
+    a model later (e.g. ``users.device_fp_hash`` → "one device, one employee")
     needs an explicit ``CREATE UNIQUE INDEX`` on databases that predate it.
     """
     inspector = inspect(sync_conn)
-    if "users" not in set(inspector.get_table_names()):
-        return  # create_all will have built it with the index already
-    index_names = {ix["name"] for ix in inspector.get_indexes("users")}
-    if "uq_users_device_fp_hash" in index_names:
-        return
+    for table, column, index_name in _UNIQUE_INDEX_MIGRATIONS:
+        if table not in set(inspector.get_table_names()):
+            continue  # create_all will have built it with the index already
+        index_names = {ix["name"] for ix in inspector.get_indexes(table)}
+        if index_name in index_names:
+            continue
 
-    # Safety: never crash boot if (unexpectedly) two rows already share a device.
-    # The app logic prevents this, but a pre-existing duplicate would make the
-    # CREATE UNIQUE INDEX fail — so skip with a loud warning instead.
-    dup = sync_conn.execute(
-        text(
-            "SELECT device_fp_hash FROM users "
-            "WHERE device_fp_hash IS NOT NULL "
-            "GROUP BY device_fp_hash HAVING COUNT(*) > 1 LIMIT 1"
-        )
-    ).first()
-    if dup is not None:
-        logger.warning(
-            "Skipping unique index on users.device_fp_hash: a duplicate device "
-            "binding already exists. Reset the duplicate device(s) and restart."
-        )
-        return
+        # Safety: never crash boot if (unexpectedly) two rows already share a
+        # value. The app logic prevents this, but a pre-existing duplicate
+        # would make the CREATE UNIQUE INDEX fail — skip with a loud warning.
+        dup = sync_conn.execute(
+            text(
+                f"SELECT {column} FROM {table} "
+                f"WHERE {column} IS NOT NULL "
+                f"GROUP BY {column} HAVING COUNT(*) > 1 LIMIT 1"
+            )
+        ).first()
+        if dup is not None:
+            logger.warning(
+                "Skipping unique index on %s.%s: a duplicate value already "
+                "exists. Resolve the duplicate(s) and restart.",
+                table, column,
+            )
+            continue
 
-    sync_conn.execute(
-        text(
-            "CREATE UNIQUE INDEX uq_users_device_fp_hash "
-            "ON users (device_fp_hash)"
+        sync_conn.execute(
+            text(f"CREATE UNIQUE INDEX {index_name} ON {table} ({column})")
         )
-    )
-    logger.info("Schema upgrade: unique index on users.device_fp_hash")
+        logger.info("Schema upgrade: unique index on %s.%s", table, column)
 
 
 def _apply_enum_migrations(sync_conn) -> None:

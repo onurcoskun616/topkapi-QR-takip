@@ -92,6 +92,7 @@ def seeded(client):
             "job_title": "Öğretmen",
             "branch": "Matematik",
             "birth_date": "1990-05-20",
+            "tc_kimlik_no": "11111111042",
             "campus_id": campus_a["id"],
             "device_fingerprint": "staff-fp-bbbbbbbb",
         },
@@ -107,6 +108,7 @@ def seeded(client):
         "dir_b_headers": dir_b_headers,
         "staff_headers": staff_headers,
         "staff_id": staff_id,
+        "staff_tc_kimlik_no": "11111111042",
         "campus_a": campus_a,
         "campus_b": campus_b,
     }
