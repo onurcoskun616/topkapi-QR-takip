@@ -200,12 +200,7 @@ export default function App() {
       {current?.kind === "scan" && (
         <ScanResult name={current.name} type={current.type} onDone={dismiss} />
       )}
-      <svg className="kiosk__logo" viewBox="0 0 100 100" aria-hidden="true">
-        <circle className="kiosk__logo-ring" cx="50" cy="50" r="46" />
-        <text className="kiosk__logo-text" x="50" y="62" textAnchor="middle">
-          TO
-        </text>
-      </svg>
+      <div className="kiosk__logo" aria-hidden="true">TO</div>
       <h1 className="kiosk__title">Topkapı Okulları</h1>
       <p className="kiosk__subtitle">
         Giriş / Çıkış için telefonunuzla QR kodu okutun
@@ -215,7 +210,7 @@ export default function App() {
         {token ? (
           <QRCodeSVG
             value={token}
-            size={Math.min(window.innerWidth, window.innerHeight) * 0.45}
+            size={Math.min(window.innerWidth * 0.46, window.innerHeight * 0.36)}
             level="M"
             includeMargin={false}
           />
