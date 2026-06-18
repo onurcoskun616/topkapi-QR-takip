@@ -153,11 +153,13 @@ body {
   height: 100% !important;
   object-fit: cover !important;
 }
-/* Suppress html5-qrcode's own scan-region overlay (corner brackets) so only
-   our single .scanner__frame guide is shown — its position is computed from the
-   raw video frame and drifts out of alignment under object-fit: cover. */
-#qr-reader__scan_region img,
-#qr-shaded-region {
+/* html5-qrcode injects its own scan-region / shaded overlay (corner brackets,
+   dark mask) whose position is computed from the raw video frame and drifts out
+   of alignment once the video is letterboxed by object-fit: cover — that's the
+   "double / shifted frame" users saw. Show ONLY the <video>; our single
+   .scanner__frame is the one guide on screen. Version-proof: hides whatever the
+   library adds (shaded region, canvas, brackets) regardless of its ids. */
+.scanner__reader > *:not(video) {
   display: none !important;
 }
 .scanner__hint {
