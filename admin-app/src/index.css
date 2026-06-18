@@ -540,6 +540,62 @@ select:focus {
 .cal__tag--holiday { background: #5aa9e6; color: #04243f; }
 .cal__tag--leave { background: rgba(255, 200, 61, 0.2); color: var(--accent); }
 
+/* ---- Mobile / small screens ----
+   The top bar is a single row on desktop (brand · tabs · account actions).
+   On a phone that overflows, so it wraps: brand + account stay on the first
+   line, and the tab bar drops to its own full-width row that scrolls
+   horizontally (swipe) instead of squashing every tab. Cards, tables and
+   filters tighten up their padding so content isn't lost to chrome. */
+@media (max-width: 760px) {
+  .topbar {
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    padding: 10px 14px;
+  }
+  .brand {
+    font-size: 0.95rem;
+  }
+  .tabs {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .topbar__right {
+    gap: 8px 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .content {
+    padding: 14px;
+  }
+  .card {
+    padding: 14px;
+  }
+  .card__title {
+    font-size: 1rem;
+  }
+  .kpi {
+    padding: 16px;
+  }
+  .kpi__value {
+    font-size: 2rem;
+  }
+  .table th,
+  .table td {
+    padding: 8px 10px;
+    font-size: 0.86rem;
+  }
+  .modal-backdrop .card {
+    width: min(360px, 94vw);
+  }
+}
+
 /* ---- Print / PDF (Reports) ---- */
 @media print {
   .topbar, .tabs, .filters .actions, .btn { display: none !important; }

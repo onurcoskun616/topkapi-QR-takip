@@ -390,6 +390,29 @@ def test_late_detail_lists_each_event_with_date_and_time(client, seeded):
     assert mine[1]["date"] == "2026-06-10" and mine[1]["arrival_time"] == "08:25"
     assert mine[1]["minutes_late"] == 25
     assert mine[1]["shift_start"] == "08:00"
+    # Reports carry the person's görev (job_title) and branş (branch).
+    assert mine[0]["job_title"] == "Öğretmen"
+    assert mine[0]["branch"] == "Matematik"
+
+
+def test_late_ranking_includes_job_title_and_branch(client, seeded):
+    r = client.post(
+        "/api/logs/manual",
+        headers=seeded["dir_a_headers"],
+        json={"user_id": seeded["staff_id"], "type": "IN", "date": "2026-06-09", "time": "08:40:00"},
+    )
+    assert r.status_code == 201
+
+    r = client.get(
+        "/api/reports/late",
+        headers=seeded["dir_a_headers"],
+        params={"start_date": "2026-06-01", "end_date": "2026-06-30", "threshold_minutes": 0},
+    )
+    assert r.status_code == 200
+    mine = [row for row in r.json() if row["user_id"] == seeded["staff_id"]]
+    assert len(mine) == 1
+    assert mine[0]["job_title"] == "Öğretmen"
+    assert mine[0]["branch"] == "Matematik"
 
 
 def test_early_leave_detail_lists_each_event_with_date_and_time(client, seeded):

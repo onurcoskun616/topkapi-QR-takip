@@ -220,6 +220,8 @@ async def late_ranking(
                 LateRankingEntry(
                     user_id=s.id,
                     full_name=s.full_name,
+                    job_title=s.job_title,
+                    branch=s.branch,
                     campus_name=campus.name,
                     late_days=len(late_minutes),
                     average_late_minutes=round(sum(late_minutes) / len(late_minutes), 1),
@@ -277,6 +279,8 @@ async def early_leave_ranking(
                 EarlyLeaveRankingEntry(
                     user_id=s.id,
                     full_name=s.full_name,
+                    job_title=s.job_title,
+                    branch=s.branch,
                     campus_name=campus.name,
                     early_leave_days=len(early_minutes),
                     average_early_minutes=round(sum(early_minutes) / len(early_minutes), 1),
@@ -335,6 +339,8 @@ async def late_detail(
                         LateArrivalEntry(
                             user_id=s.id,
                             full_name=s.full_name,
+                            job_title=s.job_title,
+                            branch=s.branch,
                             campus_name=campus.name,
                             date=d,
                             arrival_time=bucket.first_in.strftime("%H:%M"),
@@ -395,6 +401,8 @@ async def early_leave_detail(
                         EarlyLeaveEntry(
                             user_id=s.id,
                             full_name=s.full_name,
+                            job_title=s.job_title,
+                            branch=s.branch,
                             campus_name=campus.name,
                             date=d,
                             leave_time=bucket.last_out.strftime("%H:%M"),
@@ -463,6 +471,8 @@ async def _compute_absences(
                 AbsenceDayEntry(
                     user_id=s.id,
                     full_name=s.full_name,
+                    job_title=s.job_title,
+                    branch=s.branch,
                     campus_name=names.get(s.campus_id) if s.campus_id else None,
                     date=d,
                     status=covering.leave_type if covering else "unresolved",
@@ -519,6 +529,8 @@ async def absence_summary(
             by_staff[e.user_id] = AbsenceTotalEntry(
                 user_id=e.user_id,
                 full_name=e.full_name,
+                job_title=e.job_title,
+                branch=e.branch,
                 campus_name=e.campus_name,
                 absent_days=0,
                 unresolved_days=0,
@@ -749,33 +761,33 @@ async def export_reports_xlsx(
 
     ws = wb.active
     ws.title = "Geç Kalmalar"
-    ws.append(["Personel", "Kampüs", "Geç Kaldığı Gün Sayısı", "Ortalama Geç Kalma (dk)"])
+    ws.append(["Personel", "Görev", "Branş", "Kampüs", "Geç Kaldığı Gün Sayısı", "Ortalama Geç Kalma (dk)"])
     for r in late:
-        ws.append([r.full_name, r.campus_name or "", r.late_days, r.average_late_minutes])
+        ws.append([r.full_name, r.job_title or "", r.branch or "", r.campus_name or "", r.late_days, r.average_late_minutes])
 
     ws2 = wb.create_sheet("Erken Çıkışlar")
-    ws2.append(["Personel", "Kampüs", "Erken Çıktığı Gün Sayısı", "Ortalama Erken Çıkma (dk)"])
+    ws2.append(["Personel", "Görev", "Branş", "Kampüs", "Erken Çıktığı Gün Sayısı", "Ortalama Erken Çıkma (dk)"])
     for r in early:
-        ws2.append([r.full_name, r.campus_name or "", r.early_leave_days, r.average_early_minutes])
+        ws2.append([r.full_name, r.job_title or "", r.branch or "", r.campus_name or "", r.early_leave_days, r.average_early_minutes])
 
     ws_ld = wb.create_sheet("Geç Giriş Listesi")
-    ws_ld.append(["Tarih", "Saat", "Personel", "Kampüs", "Mesai Başlangıcı", "Gecikme (dk)"])
+    ws_ld.append(["Tarih", "Saat", "Personel", "Görev", "Branş", "Kampüs", "Mesai Başlangıcı", "Gecikme (dk)"])
     for e in late_list:
         ws_ld.append(
-            [e.date.isoformat(), e.arrival_time, e.full_name, e.campus_name or "", e.shift_start, e.minutes_late]
+            [e.date.isoformat(), e.arrival_time, e.full_name, e.job_title or "", e.branch or "", e.campus_name or "", e.shift_start, e.minutes_late]
         )
 
     ws_ed = wb.create_sheet("Erken Çıkış Listesi")
-    ws_ed.append(["Tarih", "Saat", "Personel", "Kampüs", "Mesai Bitişi", "Erken (dk)"])
+    ws_ed.append(["Tarih", "Saat", "Personel", "Görev", "Branş", "Kampüs", "Mesai Bitişi", "Erken (dk)"])
     for e in early_list:
         ws_ed.append(
-            [e.date.isoformat(), e.leave_time, e.full_name, e.campus_name or "", e.shift_end, e.minutes_early]
+            [e.date.isoformat(), e.leave_time, e.full_name, e.job_title or "", e.branch or "", e.campus_name or "", e.shift_end, e.minutes_early]
         )
 
     ws3 = wb.create_sheet("Devamsızlık Detay")
-    ws3.append(["Personel", "Kampüs", "Tarih", "Durum"])
+    ws3.append(["Personel", "Görev", "Branş", "Kampüs", "Tarih", "Durum"])
     for e in absences:
-        ws3.append([e.full_name, e.campus_name or "", e.date.isoformat(), e.status])
+        ws3.append([e.full_name, e.job_title or "", e.branch or "", e.campus_name or "", e.date.isoformat(), e.status])
 
     ws4 = wb.create_sheet("Devamsızlık Özeti")
     ws4.append(["İzin/Durum Türü", "Toplam Gün", "Personel Sayısı"])
@@ -784,9 +796,9 @@ async def export_reports_xlsx(
     ws4.append([])
     ws4.append(["Durum Girilmemiş Gün Sayısı", summary.unresolved_count])
     ws4.append([])
-    ws4.append(["Personel", "Kampüs", "Toplam Devamsız Gün", "Durum Girilmemiş Gün"])
+    ws4.append(["Personel", "Görev", "Branş", "Kampüs", "Toplam Devamsız Gün", "Durum Girilmemiş Gün"])
     for t in summary.totals_by_staff:
-        ws4.append([t.full_name, t.campus_name or "", t.absent_days, t.unresolved_days])
+        ws4.append([t.full_name, t.job_title or "", t.branch or "", t.campus_name or "", t.absent_days, t.unresolved_days])
 
     buffer = BytesIO()
     wb.save(buffer)

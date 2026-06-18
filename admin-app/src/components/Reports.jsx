@@ -7,6 +7,13 @@ function iso(d) {
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
 }
 
+// "Öğretmen · Matematik" — the person's görev (job_title) and branş (branch),
+// shown together in report tables so a manager sees who each row is at a glance.
+function roleLabel(row) {
+  const parts = [row.job_title, row.branch].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "—";
+}
+
 function presetRange(kind) {
   const today = new Date();
   if (kind === "today") return { start: iso(today), end: iso(today) };
@@ -283,6 +290,7 @@ export default function Reports({ isHq }) {
             <thead>
               <tr>
                 <th>Personel</th>
+                <th>Görev / Branş</th>
                 {isHq && <th>Kampüs</th>}
                 <th>Geç Kaldığı Gün</th>
                 <th>Ortalama Gecikme (dk)</th>
@@ -291,7 +299,7 @@ export default function Reports({ isHq }) {
             <tbody>
               {late.length === 0 ? (
                 <tr>
-                  <td colSpan={isHq ? 4 : 3} className="muted">
+                  <td colSpan={isHq ? 5 : 4} className="muted">
                     Kayıt yok.
                   </td>
                 </tr>
@@ -299,6 +307,7 @@ export default function Reports({ isHq }) {
                 late.map((r) => (
                   <tr key={r.user_id}>
                     <td>{r.full_name}</td>
+                    <td className="muted small">{roleLabel(r)}</td>
                     {isHq && <td className="muted small">{r.campus_name || "—"}</td>}
                     <td>{r.late_days}</td>
                     <td>{r.average_late_minutes}</td>
@@ -317,6 +326,7 @@ export default function Reports({ isHq }) {
             <thead>
               <tr>
                 <th>Personel</th>
+                <th>Görev / Branş</th>
                 {isHq && <th>Kampüs</th>}
                 <th>Erken Çıktığı Gün</th>
                 <th>Ortalama Erken Çıkma (dk)</th>
@@ -325,7 +335,7 @@ export default function Reports({ isHq }) {
             <tbody>
               {early.length === 0 ? (
                 <tr>
-                  <td colSpan={isHq ? 4 : 3} className="muted">
+                  <td colSpan={isHq ? 5 : 4} className="muted">
                     Kayıt yok.
                   </td>
                 </tr>
@@ -333,6 +343,7 @@ export default function Reports({ isHq }) {
                 early.map((r) => (
                   <tr key={r.user_id}>
                     <td>{r.full_name}</td>
+                    <td className="muted small">{roleLabel(r)}</td>
                     {isHq && <td className="muted small">{r.campus_name || "—"}</td>}
                     <td>{r.early_leave_days}</td>
                     <td>{r.average_early_minutes}</td>
@@ -353,6 +364,7 @@ export default function Reports({ isHq }) {
                 <th>Tarih</th>
                 <th>Saat</th>
                 <th>Personel</th>
+                <th>Görev / Branş</th>
                 {isHq && <th>Kampüs</th>}
                 <th>Mesai Başlangıcı</th>
                 <th>Gecikme (dk)</th>
@@ -361,7 +373,7 @@ export default function Reports({ isHq }) {
             <tbody>
               {lateList.length === 0 ? (
                 <tr>
-                  <td colSpan={isHq ? 6 : 5} className="muted">
+                  <td colSpan={isHq ? 7 : 6} className="muted">
                     Kayıt yok.
                   </td>
                 </tr>
@@ -371,6 +383,7 @@ export default function Reports({ isHq }) {
                     <td className="muted small">{e.date}</td>
                     <td><strong>{e.arrival_time}</strong></td>
                     <td>{e.full_name}</td>
+                    <td className="muted small">{roleLabel(e)}</td>
                     {isHq && <td className="muted small">{e.campus_name || "—"}</td>}
                     <td className="muted small">{e.shift_start}</td>
                     <td>
@@ -393,6 +406,7 @@ export default function Reports({ isHq }) {
                 <th>Tarih</th>
                 <th>Saat</th>
                 <th>Personel</th>
+                <th>Görev / Branş</th>
                 {isHq && <th>Kampüs</th>}
                 <th>Mesai Bitişi</th>
                 <th>Erken (dk)</th>
@@ -401,7 +415,7 @@ export default function Reports({ isHq }) {
             <tbody>
               {earlyList.length === 0 ? (
                 <tr>
-                  <td colSpan={isHq ? 6 : 5} className="muted">
+                  <td colSpan={isHq ? 7 : 6} className="muted">
                     Kayıt yok.
                   </td>
                 </tr>
@@ -411,6 +425,7 @@ export default function Reports({ isHq }) {
                     <td className="muted small">{e.date}</td>
                     <td><strong>{e.leave_time}</strong></td>
                     <td>{e.full_name}</td>
+                    <td className="muted small">{roleLabel(e)}</td>
                     {isHq && <td className="muted small">{e.campus_name || "—"}</td>}
                     <td className="muted small">{e.shift_end}</td>
                     <td>
@@ -455,6 +470,7 @@ export default function Reports({ isHq }) {
             <thead>
               <tr>
                 <th>Personel</th>
+                <th>Görev / Branş</th>
                 {isHq && <th>Kampüs</th>}
                 <th>Toplam Devamsız Gün</th>
                 <th>Durum Girilmemiş Gün</th>
@@ -463,7 +479,7 @@ export default function Reports({ isHq }) {
             <tbody>
               {!summary || summary.totals_by_staff.length === 0 ? (
                 <tr>
-                  <td colSpan={isHq ? 4 : 3} className="muted">
+                  <td colSpan={isHq ? 5 : 4} className="muted">
                     Kayıt yok.
                   </td>
                 </tr>
@@ -471,6 +487,7 @@ export default function Reports({ isHq }) {
                 summary.totals_by_staff.map((t) => (
                   <tr key={t.user_id}>
                     <td>{t.full_name}</td>
+                    <td className="muted small">{roleLabel(t)}</td>
                     {isHq && <td className="muted small">{t.campus_name || "—"}</td>}
                     <td>{t.absent_days}</td>
                     <td>

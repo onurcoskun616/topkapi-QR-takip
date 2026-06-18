@@ -366,6 +366,8 @@ class HolidayResponse(BaseModel):
 class LateRankingEntry(BaseModel):
     user_id: int
     full_name: str
+    job_title: str | None = None   # görev
+    branch: str | None = None      # branş
     campus_name: str | None = None
     late_days: int
     average_late_minutes: float
@@ -374,6 +376,8 @@ class LateRankingEntry(BaseModel):
 class EarlyLeaveRankingEntry(BaseModel):
     user_id: int
     full_name: str
+    job_title: str | None = None   # görev
+    branch: str | None = None      # branş
     campus_name: str | None = None
     early_leave_days: int
     average_early_minutes: float
@@ -386,6 +390,8 @@ class LateArrivalEntry(BaseModel):
 
     user_id: int
     full_name: str
+    job_title: str | None = None   # görev
+    branch: str | None = None      # branş
     campus_name: str | None = None
     date: date
     arrival_time: str   # local clock time of the first IN, "HH:MM"
@@ -399,6 +405,8 @@ class EarlyLeaveEntry(BaseModel):
 
     user_id: int
     full_name: str
+    job_title: str | None = None   # görev
+    branch: str | None = None      # branş
     campus_name: str | None = None
     date: date
     leave_time: str     # local clock time of the last OUT, "HH:MM"
@@ -413,6 +421,8 @@ class AbsenceDayEntry(BaseModel):
 
     user_id: int
     full_name: str
+    job_title: str | None = None   # görev
+    branch: str | None = None      # branş
     campus_name: str | None = None
     date: date
     status: str  # "present" | <leave_type> | "unresolved"
@@ -428,6 +438,8 @@ class AbsenceReasonStat(BaseModel):
 class AbsenceTotalEntry(BaseModel):
     user_id: int
     full_name: str
+    job_title: str | None = None   # görev
+    branch: str | None = None      # branş
     campus_name: str | None = None
     absent_days: int
     unresolved_days: int

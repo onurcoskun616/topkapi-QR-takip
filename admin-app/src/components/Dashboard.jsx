@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth";
-import { api, downloadCsv } from "../api";
+import { api, downloadLogsXlsx } from "../api";
 
 function todayLocalISO() {
   const d = new Date();
@@ -85,7 +85,7 @@ export default function Dashboard({ isHq }) {
 
   const onExport = async () => {
     try {
-      await downloadCsv(token, { userId, day, ...campusFilter });
+      await downloadLogsXlsx(token, { userId, day, ...campusFilter });
     } catch (e) {
       setError(e.message);
     }
@@ -218,7 +218,7 @@ export default function Dashboard({ isHq }) {
           </button>
           <div className="grow" />
           <button className="btn btn--primary" onClick={onExport}>
-            CSV İndir
+            Excel İndir
           </button>
         </div>
 
