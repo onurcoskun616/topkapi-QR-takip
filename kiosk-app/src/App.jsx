@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { fetchQrToken, fetchRecentScans } from "./api";
+import { fetchQrToken, fetchQrTokenStatus, fetchRecentScans } from "./api";
 import BirthdayOverlay from "./BirthdayOverlay";
 import ScanResult from "./ScanResult";
 import logo from "./assets/logo.png";
@@ -22,6 +22,12 @@ const SCAN_POLL_MS = 700;
 // Cap pending confirmations so a morning rush keeps the tablet on recent scans
 // instead of lagging seconds behind (birthdays are never dropped).
 const MAX_PENDING = 4;
+// How often we ask "has my currently-displayed code been scanned yet?" so a
+// kiosk can roll over to a fresh code right away instead of leaving a dead
+// one on screen for the rest of its 15s window — useful with several kiosks
+// at one campus, where the next person may well be standing at this exact
+// tablet moments after someone else's scan.
+const TOKEN_STATUS_POLL_MS = 800;
 
 /**
  * Full-screen kiosk:
@@ -32,6 +38,7 @@ const MAX_PENDING = 4;
  */
 export default function App() {
   const [token, setToken] = useState(null);
+  const [jti, setJti] = useState(null);
   const [expiresAt, setExpiresAt] = useState(null);
   const [ttl, setTtl] = useState(15);
   const [remaining, setRemaining] = useState(15);
@@ -59,6 +66,7 @@ export default function App() {
       const serverNow = new Date(data.server_time).getTime();
       serverOffsetRef.current = serverNow - Date.now();
       setToken(data.token);
+      setJti(data.jti);
       setExpiresAt(new Date(data.expires_at).getTime());
       setTtl(data.ttl_seconds);
       setError(null);
@@ -96,6 +104,28 @@ export default function App() {
     }, 250);
     return () => clearInterval(interval);
   }, [expiresAt, refresh]);
+
+  // Watch the currently-displayed code: the moment it's scanned, roll over to
+  // a fresh one immediately rather than waiting out the rest of its 15s slot.
+  useEffect(() => {
+    if (!jti) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    const poll = async () => {
+      try {
+        const data = await fetchQrTokenStatus(jti, controller.signal);
+        if (!cancelled && data.used) refresh();
+      } catch {
+        /* transient; next tick retries */
+      }
+    };
+    const interval = setInterval(poll, TOKEN_STATUS_POLL_MS);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, [jti, refresh]);
 
   // Live wall-clock display (HH:MM:SS), corrected by the same server offset
   // used for the countdown, so staff can read the exact time of their scan

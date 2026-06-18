@@ -7,10 +7,14 @@ scanning it; the secret never leaves the server.
 """
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
-from ..schemas import QrTokenResponse
+from ..database import get_db
+from ..models import UsedQrToken
+from ..schemas import QrTokenResponse, QrTokenStatusResponse
 from ..security import create_qr_token
 
 router = APIRouter(prefix="/api/qr", tags=["qr"])
@@ -22,8 +26,26 @@ async def get_qr_token():
     data = create_qr_token()
     return QrTokenResponse(
         token=data["token"],
+        jti=data["jti"],
         issued_at=data["issued_at"],
         expires_at=data["expires_at"],
         ttl_seconds=settings.qr_token_ttl_seconds,
         server_time=datetime.now(timezone.utc),
     )
+
+
+@router.get("/token/{jti}/status", response_model=QrTokenStatusResponse)
+async def get_qr_token_status(jti: str, db: AsyncSession = Depends(get_db)):
+    """Has this token already been consumed by a scan?
+
+    Several kiosks can be running at once at the same campus; each shows its
+    own independently-generated code, so the same code never appears on two
+    screens at the same time. This lets a kiosk notice the *instant* its own
+    currently-displayed code is scanned, so it can roll over to a fresh one
+    immediately instead of leaving a dead code on screen for the rest of its
+    15-second window.
+    """
+    used = (
+        await db.execute(select(UsedQrToken.jti).where(UsedQrToken.jti == jti))
+    ).scalar_one_or_none() is not None
+    return QrTokenStatusResponse(used=used)

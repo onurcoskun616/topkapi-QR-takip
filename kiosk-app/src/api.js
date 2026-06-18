@@ -10,7 +10,22 @@ export async function fetchQrToken(signal) {
   if (!res.ok) {
     throw new Error(`QR token isteği başarısız (${res.status})`);
   }
-  return res.json(); // { token, issued_at, expires_at, ttl_seconds, server_time }
+  return res.json(); // { token, jti, issued_at, expires_at, ttl_seconds, server_time }
+}
+
+/**
+ * Has the currently-displayed token already been scanned? Polled frequently
+ * so the kiosk can roll over to a fresh code the instant it's used, instead
+ * of leaving a dead code on screen for the rest of its 15s window.
+ */
+export async function fetchQrTokenStatus(jti, signal) {
+  const res = await fetch(`${API_BASE_URL}/api/qr/token/${encodeURIComponent(jti)}/status`, {
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(`QR durum isteği başarısız (${res.status})`);
+  }
+  return res.json(); // { used }
 }
 
 /**

@@ -187,10 +187,15 @@ class StaffUpdate(BaseModel):
 # --------------------------------------------------------------------------- #
 class QrTokenResponse(BaseModel):
     token: str
+    jti: str
     issued_at: datetime
     expires_at: datetime
     ttl_seconds: int
     server_time: datetime
+
+
+class QrTokenStatusResponse(BaseModel):
+    used: bool
 
 
 # --------------------------------------------------------------------------- #

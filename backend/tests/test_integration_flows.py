@@ -167,6 +167,35 @@ def test_scan_blocked_during_active_leave_and_unblocked_after_cancel(client, see
 
 
 # --------------------------------------------------------------------------- #
+# QR token status — lets a kiosk notice its own code was scanned and roll
+# over immediately, instead of waiting out the rest of its 15s window. Each
+# kiosk always mints its own independently-random code (different jti every
+# time), so the same code can never appear on two tablets at once.
+# --------------------------------------------------------------------------- #
+def test_qr_token_status_flips_to_used_after_scan(client, seeded):
+    issued = client.get("/api/qr/token").json()
+    assert issued["jti"]
+
+    r = client.get(f"/api/qr/token/{issued['jti']}/status")
+    assert r.status_code == 200
+    assert r.json() == {"used": False}
+
+    r = client.post(
+        "/api/scan", headers=seeded["staff_headers"], json={"qr_token": issued["token"]}
+    )
+    assert r.status_code == 200
+
+    r = client.get(f"/api/qr/token/{issued['jti']}/status")
+    assert r.json() == {"used": True}
+
+
+def test_qr_token_status_unknown_jti_is_unused(client, seeded):
+    r = client.get("/api/qr/token/never-issued-jti/status")
+    assert r.status_code == 200
+    assert r.json() == {"used": False}
+
+
+# --------------------------------------------------------------------------- #
 # Shift hours — hq-only
 # --------------------------------------------------------------------------- #
 def test_hq_set_shift_hours_visible_via_campus_list(client, seeded):
