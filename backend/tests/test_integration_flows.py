@@ -696,3 +696,73 @@ def test_recent_scans_scoped_to_campus(client, seeded):
 
     # A campus B kiosk must not see campus A's scan.
     assert _recent_scans(client, seeded["campus_b"]["id"]) == []
+
+
+# --------------------------------------------------------------------------- #
+# One-time staff reset script (app.scripts.reset_staff)
+# --------------------------------------------------------------------------- #
+def test_reset_staff_preview_changes_nothing_then_confirm_wipes_staff(client, seeded):
+    import asyncio
+
+    # Give the staff member some history: a scan + a leave record.
+    assert _scan(client, seeded).status_code == 200
+    r = client.post(
+        "/api/leaves",
+        headers=seeded["dir_a_headers"],
+        json={
+            "user_id": seeded["staff_id"],
+            "leave_type": "Ücretli izin",
+            "start_date": "2026-06-02",
+            "end_date": "2026-06-03",
+        },
+    )
+    assert r.status_code == 201
+
+    from app.database import AsyncSessionLocal
+    from app.scripts.reset_staff import gather_counts, reset_staff
+
+    async def _preview():
+        async with AsyncSessionLocal() as s:
+            return await gather_counts(s)
+
+    counts = asyncio.run(_preview())
+    assert counts["staff"] == 1
+    assert counts["logs"] >= 1
+    assert counts["leaves"] == 1
+
+    # Preview must not have deleted anything: the staff member is still listed.
+    rows = client.get("/api/staff", headers=seeded["dir_a_headers"]).json()
+    assert any(row["id"] == seeded["staff_id"] for row in rows)
+
+    async def _do():
+        async with AsyncSessionLocal() as s:
+            return await reset_staff(s)
+
+    deleted = asyncio.run(_do())
+    assert deleted["staff"] == 1
+
+    # Staff gone; managers (directors + hq) untouched and still able to log in.
+    rows = client.get("/api/staff", headers=seeded["dir_a_headers"]).json()
+    assert rows == []
+    dirs = client.get("/api/directors", headers=seeded["hq_headers"]).json()
+    assert any(d["full_name"] == "Müdür A" for d in dirs)
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "director.a@test.com", "password": "DirPassword123!", "device_fingerprint": "dir-a-fp-aaaa"},
+    )
+    assert r.status_code == 200
+
+    # And the same phone number can register fresh again (binding was cleared).
+    r = client.post(
+        "/api/auth/register",
+        json={
+            "full_name": "Ayşe Yılmaz",
+            "phone": "0532 111 22 33",
+            "job_title": "Öğretmen",
+            "branch": "Matematik",
+            "birth_date": "1990-05-20",
+            "campus_id": seeded["campus_a"]["id"],
+            "device_fingerprint": "staff-fp-bbbbbbbb",
+        },
+    )
+    assert r.status_code == 201
