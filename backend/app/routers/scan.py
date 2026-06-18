@@ -71,6 +71,15 @@ async def scan(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz QR kod."
         )
 
+    # --- 1b. Campus binding: a code shown at one campus can't be scanned by a
+    # teacher from another (only enforced for campus-bound tokens) ------------
+    token_campus_id = qr.get("cid")
+    if token_campus_id is not None and current.campus_id != token_campus_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu QR kod başka bir kampüse ait. Lütfen kendi kampüsünüzdeki kodu okutun.",
+        )
+
     # --- 2. Replay protection: consume the jti exactly once ------------------
     db.add(UsedQrToken(jti=jti))
     try:

@@ -62,7 +62,7 @@ export default function App() {
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const data = await fetchQrToken(controller.signal);
+      const data = await fetchQrToken(campusIdRef.current, controller.signal);
       const serverNow = new Date(data.server_time).getTime();
       serverOffsetRef.current = serverNow - Date.now();
       setToken(data.token);

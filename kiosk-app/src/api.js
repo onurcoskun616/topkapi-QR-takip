@@ -5,8 +5,11 @@ const API_BASE_URL =
  * Fetch a fresh kiosk QR token from the backend.
  * The backend is the single source of truth for timing (server UTC).
  */
-export async function fetchQrToken(signal) {
-  const res = await fetch(`${API_BASE_URL}/api/qr/token`, { signal });
+export async function fetchQrToken(campusId, signal) {
+  const url = campusId
+    ? `${API_BASE_URL}/api/qr/token?campus_id=${encodeURIComponent(campusId)}`
+    : `${API_BASE_URL}/api/qr/token`;
+  const res = await fetch(url, { signal });
   if (!res.ok) {
     throw new Error(`QR token isteği başarısız (${res.status})`);
   }

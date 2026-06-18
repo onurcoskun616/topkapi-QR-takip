@@ -13,6 +13,7 @@ import pytest
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
+    monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
     monkeypatch.setenv("AUTH_SECRET", "test-auth-secret")
     monkeypatch.setenv("REFRESH_SECRET", "test-refresh-secret")

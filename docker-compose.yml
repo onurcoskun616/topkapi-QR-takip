@@ -21,6 +21,7 @@ services:
       db:
         condition: service_healthy
     environment:
+      APP_ENV: development
       DATABASE_URL: postgresql+asyncpg://topkapi:topkapi@db:5432/topkapi_qr
       AUTH_SECRET: dev-access-secret-change-in-production
       REFRESH_SECRET: dev-refresh-secret-change-in-production

@@ -12,7 +12,7 @@ from .bootstrap import (
     ensure_campuses,
     ensure_schema_upgrades,
 )
-from .config import settings
+from .config import assert_production_security, settings
 from .deps import get_current_hq
 from .routers import (
     auth,
@@ -37,6 +37,9 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail closed before doing anything else: never serve with insecure
+    # production secrets.
+    assert_production_security(settings)
     await create_tables()
     await ensure_schema_upgrades()
     await ensure_campuses()
@@ -58,8 +61,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(auth.router)

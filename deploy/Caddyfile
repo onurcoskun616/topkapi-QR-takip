@@ -4,26 +4,46 @@
 	email {$ACME_EMAIL}
 }
 
+# Shared response-hardening headers applied to every site below.
+(security_headers) {
+	header {
+		# Force HTTPS for a year (Caddy already redirects http→https).
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# Block MIME-type sniffing.
+		X-Content-Type-Options "nosniff"
+		# Disallow framing (clickjacking protection).
+		X-Frame-Options "SAMEORIGIN"
+		# Don't leak full URLs to third parties.
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Hide the server software banner.
+		-Server
+	}
+}
+
 # API — reverse proxy to the FastAPI backend.
 {$API_DOMAIN} {
+	import security_headers
 	encode gzip
 	reverse_proxy backend:8000
 }
 
 # Kiosk (tablet) — static SPA served by its nginx container.
 {$KIOSK_DOMAIN} {
+	import security_headers
 	encode gzip
 	reverse_proxy kiosk:80
 }
 
 # Admin panel — static SPA served by its nginx container.
 {$PANEL_DOMAIN} {
+	import security_headers
 	encode gzip
 	reverse_proxy admin:80
 }
 
 # Teacher PWA — installable web app served by its nginx container.
 {$APP_DOMAIN} {
+	import security_headers
 	encode gzip
 	reverse_proxy pwa:80
 }

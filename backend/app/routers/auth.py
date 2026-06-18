@@ -18,11 +18,12 @@ Both paths then use:
 """
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import JWTError
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .. import ratelimit
 from ..config import settings
 from ..database import get_db
 from ..deps import get_current_manager, get_current_user, oauth2_scheme
@@ -268,9 +269,23 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(payload: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """Manager (campus director / hq) login with email + password."""
-    result = await db.execute(select(User).where(User.email == payload.email.lower()))
+    email = payload.email.lower()
+    client_ip = request.client.host if request.client else "unknown"
+
+    # Brute-force guard: refuse early while this (email, ip) is locked out.
+    locked_for = ratelimit.is_locked(email, client_ip)
+    if locked_for:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Çok fazla hatalı giriş denemesi. Lütfen "
+                f"{max(1, locked_for // 60)} dakika sonra tekrar deneyin."
+            ),
+        )
+
+    result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
     # Always run a bcrypt verification — against a dummy hash when the email is
@@ -285,11 +300,13 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
         or user.role not in (UserRole.campus_director, UserRole.hq)
         or user.status != UserStatus.active
     ):
+        ratelimit.record_failure(email, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="E-posta veya şifre hatalı.",
         )
 
+    ratelimit.reset(email, client_ip)
     access, refresh = await _issue_session(db, user, payload.device_fingerprint)
     return TokenResponse(
         access_token=access,

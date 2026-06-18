@@ -95,8 +95,13 @@ def decode_refresh_token(token: str) -> dict:
 # --------------------------------------------------------------------------- #
 # QR (kiosk) tokens — server time (UTC) is the only authority.
 # --------------------------------------------------------------------------- #
-def create_qr_token() -> dict:
-    """Mint a fresh short-lived QR token. Returns token + timing metadata."""
+def create_qr_token(campus_id: int | None = None) -> dict:
+    """Mint a fresh short-lived QR token. Returns token + timing metadata.
+
+    When ``campus_id`` is supplied (the kiosk knows its own campus), it is
+    embedded as ``cid`` so the scan endpoint can reject a code shown at a
+    *different* campus. Omitted for backward compatibility with older kiosks.
+    """
     now = datetime.now(timezone.utc)
     exp = now + timedelta(seconds=settings.qr_token_ttl_seconds)
     jti = uuid.uuid4().hex
@@ -106,6 +111,8 @@ def create_qr_token() -> dict:
         "iat": int(now.timestamp()),
         "exp": int(exp.timestamp()),
     }
+    if campus_id is not None:
+        payload["cid"] = campus_id
     token = jwt.encode(payload, settings.qr_secret, algorithm=settings.jwt_algorithm)
     return {
         "token": token,
