@@ -38,6 +38,63 @@ body {
   gap: 1.3vh;
   text-align: center;
   padding: 2.5vh;
+  overflow: hidden;
+}
+
+.kiosk__intro,
+.kiosk__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8vh;
+}
+
+/* Tablets are often mounted sideways. Height is the scarce dimension here, so
+   the layout switches from a tall stack to three columns spread across the
+   width, and every size below trades vw for vh so nothing spills off the
+   bottom of a short screen. */
+@media (orientation: landscape) {
+  .kiosk {
+    flex-direction: row;
+    justify-content: center;
+    gap: 4vw;
+    padding: 2vh 3vw;
+  }
+
+  .kiosk__intro,
+  .kiosk__footer {
+    flex: 0 1 26vw;
+    gap: 1.2vh;
+  }
+
+  .kiosk__logo {
+    width: clamp(40px, 9vh, 70px);
+  }
+
+  .kiosk__title {
+    font-size: clamp(1.1rem, 4.4vh, 2rem);
+  }
+
+  .kiosk__subtitle {
+    font-size: clamp(0.7rem, 2.2vh, 1rem);
+  }
+
+  .qr-card {
+    padding: clamp(10px, 2.6vh, 28px);
+  }
+
+  .countdown__ring {
+    --size: clamp(56px, 16vh, 100px);
+  }
+
+  .countdown__label,
+  .status {
+    font-size: clamp(0.65rem, 1.8vh, 0.9rem);
+  }
+
+  .kiosk__clock {
+    font-size: clamp(1rem, 3.8vh, 1.6rem);
+  }
 }
 
 .kiosk__logo {

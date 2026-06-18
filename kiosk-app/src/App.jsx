@@ -193,6 +193,16 @@ export default function App() {
   const progress = Math.min(100, Math.max(0, (remaining / ttl) * 100));
   const isStale = remaining <= 0 || !token;
 
+  // Tablets get mounted in either orientation. Portrait has height to spare,
+  // so the QR leans on width; landscape is short, so it leans on height —
+  // otherwise the code (and everything below it) overflows a wide-but-short
+  // screen. Recomputed every render, which happens at least every 250ms via
+  // the countdown tick, so it tracks a live orientation change too.
+  const isLandscape = window.innerWidth > window.innerHeight;
+  const qrSize = isLandscape
+    ? Math.min(window.innerWidth * 0.22, window.innerHeight * 0.55)
+    : Math.min(window.innerWidth * 0.46, window.innerHeight * 0.36);
+
   return (
     <div className="kiosk">
       {current?.kind === "birthday" && (
@@ -201,47 +211,46 @@ export default function App() {
       {current?.kind === "scan" && (
         <ScanResult name={current.name} type={current.type} onDone={dismiss} />
       )}
-      <img className="kiosk__logo" src={logo} alt="Topkapı Okulları" />
-      <h1 className="kiosk__title">Topkapı Okulları</h1>
-      <p className="kiosk__subtitle">
-        Giriş / Çıkış için telefonunuzla QR kodu okutun
-      </p>
+      <div className="kiosk__intro">
+        <img className="kiosk__logo" src={logo} alt="Topkapı Okulları" />
+        <h1 className="kiosk__title">Topkapı Okulları</h1>
+        <p className="kiosk__subtitle">
+          Giriş / Çıkış için telefonunuzla QR kodu okutun
+        </p>
+      </div>
 
       <div className={`qr-card ${isStale ? "qr-card--stale" : ""}`}>
         {token ? (
-          <QRCodeSVG
-            value={token}
-            size={Math.min(window.innerWidth * 0.46, window.innerHeight * 0.36)}
-            level="M"
-            includeMargin={false}
-          />
+          <QRCodeSVG value={token} size={qrSize} level="M" includeMargin={false} />
         ) : (
           <div style={{ width: 240, height: 240 }} />
         )}
       </div>
 
-      <div className="countdown">
-        <div
-          className="countdown__ring"
-          style={{ "--progress": progress }}
-        >
-          <div className="countdown__ring-inner">{Math.ceil(remaining)}</div>
+      <div className="kiosk__footer">
+        <div className="countdown">
+          <div
+            className="countdown__ring"
+            style={{ "--progress": progress }}
+          >
+            <div className="countdown__ring-inner">{Math.ceil(remaining)}</div>
+          </div>
+          <span className="countdown__label">
+            Kod {ttl} saniyede bir yenilenir
+          </span>
         </div>
-        <span className="countdown__label">
-          Kod {ttl} saniyede bir yenilenir
-        </span>
-      </div>
 
-      {error ? (
-        <p className="status status--error">⚠ {error} — yeniden deneniyor…</p>
-      ) : !campusIdRef.current ? (
-        <p className="status status--error">
-          ⚠ Kampüs tanımlı değil — onay bildirimleri için adrese ?campus=&lt;id&gt; ekleyin
-        </p>
-      ) : (
-        <p className="status">Sunucu saati ile senkronize</p>
-      )}
-      <p className="kiosk__clock">{clockText}</p>
+        {error ? (
+          <p className="status status--error">⚠ {error} — yeniden deneniyor…</p>
+        ) : !campusIdRef.current ? (
+          <p className="status status--error">
+            ⚠ Kampüs tanımlı değil — onay bildirimleri için adrese ?campus=&lt;id&gt; ekleyin
+          </p>
+        ) : (
+          <p className="status">Sunucu saati ile senkronize</p>
+        )}
+        <p className="kiosk__clock">{clockText}</p>
+      </div>
     </div>
   );
 }
