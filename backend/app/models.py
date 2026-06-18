@@ -139,9 +139,11 @@ class User(Base):
     # clears this ("Cihazı Sıfırla"). Managers leave it NULL (they use passwords).
     # Persisted on the account — not only on the session — so the binding survives
     # logout/expiry and a phone number alone can never be re-claimed elsewhere.
-    device_fp_hash: Mapped[str | None] = mapped_column(
-        String(64), index=True, nullable=True
-    )
+    # A *unique* index (see __table_args__) makes "one device → one employee" a
+    # hard database invariant: even a race of two simultaneous registrations from
+    # the same phone can never bind it to two accounts. (NULLs stay distinct on
+    # both PostgreSQL and SQLite, so managers/unbound staff are unaffected.)
+    device_fp_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="user_role"), default=UserRole.staff, nullable=False
@@ -166,6 +168,11 @@ class User(Base):
         back_populates="user",
         foreign_keys="AttendanceLog.user_id",
         cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        # One device → one employee, enforced at the database level.
+        Index("uq_users_device_fp_hash", "device_fp_hash", unique=True),
     )
 
 

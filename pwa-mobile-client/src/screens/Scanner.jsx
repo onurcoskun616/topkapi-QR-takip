@@ -6,7 +6,7 @@ import LeaveRequest from "./LeaveRequest";
 const READER_ID = "qr-reader";
 
 export default function Scanner() {
-  const { user, logout, scan, myStatus } = useAuth();
+  const { user, scan, myStatus } = useAuth();
   const [mode, setMode] = useState("scan"); // scan | leave
   const [phase, setPhase] = useState("scanning"); // scanning | processing | result
   const [result, setResult] = useState(null); // { kind, message }
@@ -132,11 +132,10 @@ export default function Scanner() {
       <header className="scanner__header">
         <span className="scanner__name">{user?.full_name}</span>
         <div className="scanner__header-actions">
+          {/* No "Çıkış": one phone is permanently bound to one employee. Switching
+              devices is only possible after a manager's "Cihazı Sıfırla". */}
           <button className="link" onClick={openLeave}>
             İzin Talebi
-          </button>
-          <button className="link" onClick={logout}>
-            Çıkış
           </button>
         </div>
       </header>

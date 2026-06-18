@@ -66,6 +66,46 @@ def _apply_column_migrations(sync_conn) -> None:
         logger.info("Schema upgrade: added %s.%s", table, column)
 
 
+def _apply_index_migrations(sync_conn) -> None:
+    """Add unique indexes introduced after a table was first created.
+
+    ``create_all`` never alters an existing table, so a uniqueness rule added to
+    a model later (here: ``users.device_fp_hash`` → "one device, one employee")
+    needs an explicit ``CREATE UNIQUE INDEX`` on databases that predate it.
+    """
+    inspector = inspect(sync_conn)
+    if "users" not in set(inspector.get_table_names()):
+        return  # create_all will have built it with the index already
+    index_names = {ix["name"] for ix in inspector.get_indexes("users")}
+    if "uq_users_device_fp_hash" in index_names:
+        return
+
+    # Safety: never crash boot if (unexpectedly) two rows already share a device.
+    # The app logic prevents this, but a pre-existing duplicate would make the
+    # CREATE UNIQUE INDEX fail — so skip with a loud warning instead.
+    dup = sync_conn.execute(
+        text(
+            "SELECT device_fp_hash FROM users "
+            "WHERE device_fp_hash IS NOT NULL "
+            "GROUP BY device_fp_hash HAVING COUNT(*) > 1 LIMIT 1"
+        )
+    ).first()
+    if dup is not None:
+        logger.warning(
+            "Skipping unique index on users.device_fp_hash: a duplicate device "
+            "binding already exists. Reset the duplicate device(s) and restart."
+        )
+        return
+
+    sync_conn.execute(
+        text(
+            "CREATE UNIQUE INDEX uq_users_device_fp_hash "
+            "ON users (device_fp_hash)"
+        )
+    )
+    logger.info("Schema upgrade: unique index on users.device_fp_hash")
+
+
 def _apply_enum_migrations(sync_conn) -> None:
     # Only PostgreSQL has native enum types that need altering.
     if sync_conn.dialect.name != "postgresql":
@@ -82,6 +122,7 @@ async def ensure_schema_upgrades() -> None:
     """Add any columns/enum values introduced after a table was first created."""
     async with engine.begin() as conn:
         await conn.run_sync(_apply_column_migrations)
+        await conn.run_sync(_apply_index_migrations)
         await conn.run_sync(_apply_enum_migrations)
 
 

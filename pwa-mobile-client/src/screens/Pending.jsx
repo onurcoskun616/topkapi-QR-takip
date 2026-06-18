@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth";
 
 export default function Pending() {
-  const { user, recheck, logout } = useAuth();
+  const { user, recheck } = useAuth();
   const [checking, setChecking] = useState(false);
   const timer = useRef(null);
 
@@ -42,9 +42,6 @@ export default function Pending() {
 
         <button className="btn btn--primary" disabled={checking} onClick={onCheck}>
           {checking ? "Kontrol ediliyor…" : "Şimdi Kontrol Et"}
-        </button>
-        <button className="link" onClick={logout}>
-          Vazgeç / Çıkış
         </button>
       </div>
     </div>
