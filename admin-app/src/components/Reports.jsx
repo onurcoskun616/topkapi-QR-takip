@@ -91,6 +91,8 @@ export default function Reports({ isHq }) {
   const { token } = useAuth();
   const [campuses, setCampuses] = useState([]);
   const [campusId, setCampusId] = useState("");
+  const [staffList, setStaffList] = useState([]);
+  const [userId, setUserId] = useState("");
   const [range, setRange] = useState(presetRange("month"));
   const [thresholdMinutes, setThresholdMinutes] = useState(0);
   const [excludeWeekends, setExcludeWeekends] = useState(true);
@@ -111,10 +113,25 @@ export default function Reports({ isHq }) {
     if (isHq) api.campuses().then(setCampuses).catch(() => {});
   }, [isHq]);
 
+  // Staff picker for the "kişiye göre rapor" filter — active staff only,
+  // re-loaded when the campus filter changes (hq) so the list stays in scope.
+  useEffect(() => {
+    api
+      .listStaff(token, { status: "active", campusId: isHq ? campusId || undefined : undefined })
+      .then(setStaffList)
+      .catch(() => {});
+  }, [token, isHq, campusId]);
+
+  // A campus switch may drop the previously selected person out of scope.
+  useEffect(() => {
+    setUserId("");
+  }, [campusId]);
+
   const filters = {
     startDate: range.start,
     endDate: range.end,
     campusId: isHq ? campusId || undefined : undefined,
+    userId: userId || undefined,
     thresholdMinutes,
     excludeWeekends,
   };
@@ -151,7 +168,7 @@ export default function Reports({ isHq }) {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, range.start, range.end, campusId, thresholdMinutes, excludeWeekends]);
+  }, [token, range.start, range.end, campusId, userId, thresholdMinutes, excludeWeekends]);
 
   const onLogsXlsx = async () => {
     try {
@@ -159,6 +176,7 @@ export default function Reports({ isHq }) {
         startDate: range.start,
         endDate: range.end,
         campusId: isHq ? campusId || undefined : undefined,
+        userId: userId || undefined,
       });
     } catch (e) {
       setError(e.message);
@@ -243,6 +261,17 @@ export default function Reports({ isHq }) {
               </select>
             </label>
           )}
+          <label className="field field--inline">
+            <span>Personel</span>
+            <select value={userId} onChange={(e) => setUserId(e.target.value)}>
+              <option value="">Tüm personel</option>
+              {staffList.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.full_name}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="grow" />
           <button className="btn btn--primary" onClick={onReportsXlsx}>
             Rapor Excel İndir

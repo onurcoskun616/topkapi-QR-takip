@@ -468,6 +468,85 @@ def test_absence_summary_counts_unresolved(client, seeded):
 
 
 # --------------------------------------------------------------------------- #
+# Reports narrowed to a single person via user_id (per-person reporting)
+# --------------------------------------------------------------------------- #
+def _bulk_import_one(client, seeded, full_name, phone):
+    r = client.post(
+        "/api/staff/bulk",
+        headers=seeded["dir_a_headers"],
+        json={"rows": [{"full_name": full_name, "phone": phone, "job_title": "Öğretmen", "branch": "Tarih"}]},
+    )
+    assert r.status_code == 201
+    staff = client.get("/api/staff", headers=seeded["dir_a_headers"]).json()
+    return next(u["id"] for u in staff if u["full_name"] == full_name)
+
+
+def test_late_ranking_user_id_filters_to_one_person(client, seeded):
+    other_id = _bulk_import_one(client, seeded, "Diğer Personel", "0533 555 44 33")
+
+    for uid, t in ((seeded["staff_id"], "08:10:00"), (other_id, "08:20:00")):
+        r = client.post(
+            "/api/logs/manual",
+            headers=seeded["dir_a_headers"],
+            json={"user_id": uid, "type": "IN", "date": "2026-06-10", "time": t},
+        )
+        assert r.status_code == 201
+
+    params = {"start_date": "2026-06-01", "end_date": "2026-06-30", "threshold_minutes": 0}
+    r = client.get("/api/reports/late", headers=seeded["dir_a_headers"], params=params)
+    assert {row["user_id"] for row in r.json()} == {seeded["staff_id"], other_id}
+
+    r = client.get(
+        "/api/reports/late", headers=seeded["dir_a_headers"], params={**params, "user_id": seeded["staff_id"]}
+    )
+    assert {row["user_id"] for row in r.json()} == {seeded["staff_id"]}
+
+
+def test_daily_trend_user_id_narrows_to_one_person(client, seeded):
+    other_id = _bulk_import_one(client, seeded, "Diğer Personel", "0533 555 44 33")
+    d = _today_local() - timedelta(days=20)
+
+    params = {"start_date": d.isoformat(), "end_date": d.isoformat(), "exclude_weekends": False}
+    r = client.get("/api/reports/daily-trend", headers=seeded["dir_a_headers"], params=params)
+    assert r.status_code == 200
+    assert r.json()["total_expected"] == 2  # both staff expected that day
+
+    r = client.get(
+        "/api/reports/daily-trend",
+        headers=seeded["dir_a_headers"],
+        params={**params, "user_id": other_id},
+    )
+    assert r.status_code == 200
+    assert r.json()["total_expected"] == 1
+
+
+def test_absence_summary_user_id_narrows_to_one_person(client, seeded):
+    other_id = _bulk_import_one(client, seeded, "Diğer Personel", "0533 555 44 33")
+
+    params = {"start_date": "2026-06-08", "end_date": "2026-06-09", "exclude_weekends": "false"}
+    r = client.get("/api/reports/absence-summary", headers=seeded["dir_a_headers"], params=params)
+    both_unresolved = r.json()["unresolved_count"]
+
+    r = client.get(
+        "/api/reports/absence-summary",
+        headers=seeded["dir_a_headers"],
+        params={**params, "user_id": other_id},
+    )
+    assert r.json()["unresolved_count"] < both_unresolved
+
+
+def test_export_xlsx_accepts_user_id_filter(client, seeded):
+    other_id = _bulk_import_one(client, seeded, "Diğer Personel", "0533 555 44 33")
+    r = client.get(
+        "/api/reports/export.xlsx",
+        headers=seeded["dir_a_headers"],
+        params={"start_date": "2026-06-01", "end_date": "2026-06-30", "user_id": other_id},
+    )
+    assert r.status_code == 200
+    assert len(r.content) > 0
+
+
+# --------------------------------------------------------------------------- #
 # Exports
 # --------------------------------------------------------------------------- #
 def test_logs_range_filter_includes_both_sources(client, seeded):
@@ -702,6 +781,53 @@ def test_invalid_tc_kimlik_checksum_rejected(client, seeded):
         tc_kimlik_no="12345678901",
     )
     assert r.status_code == 422
+
+
+# --------------------------------------------------------------------------- #
+# Director rejects a pending self-registration (reuses disable/approve)
+# --------------------------------------------------------------------------- #
+def test_director_can_reject_pending_registration(client, seeded):
+    phone = "0532 777 66 55"
+    r = _register_staff(
+        client,
+        phone=phone,
+        device_fingerprint="reject-fp-11111111",
+        campus_id=seeded["campus_a"]["id"],
+        tc_kimlik_no="55555555000",
+    )
+    assert r.status_code == 201
+    new_staff_id = r.json()["user"]["id"]
+    assert r.json()["user"]["status"] == "pending"
+
+    r = client.post(f"/api/staff/{new_staff_id}/disable", headers=seeded["dir_a_headers"])
+    assert r.status_code == 200
+    assert r.json()["status"] == "disabled"
+
+    # Rejected: re-registering with the same phone is refused, even on a new device.
+    r2 = _register_staff(
+        client,
+        phone=phone,
+        device_fingerprint="reject-fp-22222222",
+        campus_id=seeded["campus_a"]["id"],
+        tc_kimlik_no="55555555000",
+    )
+    assert r2.status_code == 403
+
+    # The director can change their mind and reactivate the rejected account.
+    r3 = client.post(f"/api/staff/{new_staff_id}/approve", headers=seeded["dir_a_headers"])
+    assert r3.status_code == 200
+    assert r3.json()["status"] == "active"
+
+    # Now the same phone can register again and binds the new device.
+    r4 = _register_staff(
+        client,
+        phone=phone,
+        device_fingerprint="reject-fp-33333333",
+        campus_id=seeded["campus_a"]["id"],
+        tc_kimlik_no="55555555000",
+    )
+    assert r4.status_code == 201
+    assert r4.json()["user"]["status"] == "active"
 
 
 @pytest.mark.parametrize(

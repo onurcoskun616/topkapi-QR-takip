@@ -136,6 +136,16 @@ export default function Staff({ isHq }) {
     act(u.id, () => api.disableStaff(token, u.id), `${u.full_name} devre dışı bırakıldı.`);
   };
 
+  const reject = (u) => {
+    if (
+      !window.confirm(
+        `${u.full_name} kaydı reddedilsin mi? Bu telefonla tekrar kayıt olamaz; gerekirse "Yeniden Aktifleştir" ile geri açabilirsiniz.`
+      )
+    )
+      return;
+    act(u.id, () => api.disableStaff(token, u.id), `${u.full_name} kaydı reddedildi.`);
+  };
+
   const openManual = (u) => {
     setManualForId(u.id);
     setManualError(null);
@@ -404,13 +414,22 @@ export default function Staff({ isHq }) {
         </td>
         <td className="actions">
           {u.status === "pending" && (
-            <button
-              className="btn btn--primary btn--sm"
-              disabled={busyId === u.id}
-              onClick={() => approve(u)}
-            >
-              Onayla
-            </button>
+            <>
+              <button
+                className="btn btn--primary btn--sm"
+                disabled={busyId === u.id}
+                onClick={() => approve(u)}
+              >
+                Onayla
+              </button>
+              <button
+                className="btn btn--warn btn--sm"
+                disabled={busyId === u.id}
+                onClick={() => reject(u)}
+              >
+                Reddet
+              </button>
+            </>
           )}
           {u.status === "active" && (
             <>

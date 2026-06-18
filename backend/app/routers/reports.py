@@ -507,11 +507,12 @@ async def absence_summary(
     manager: User = Depends(get_current_manager),
     db: AsyncSession = Depends(get_db),
     campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    user_id: int | None = None,
     exclude_weekends: bool = True,
 ):
     """Aggregate absence statistics: totals by reason type, and a per-staff
     ranking of most-absent staff (with a reason breakdown each)."""
-    entries = await _compute_absences(db, manager, start_date, end_date, campus_id, None, exclude_weekends)
+    entries = await _compute_absences(db, manager, start_date, end_date, campus_id, user_id, exclude_weekends)
 
     by_reason_days: dict[str, int] = defaultdict(int)
     by_reason_staff: dict[str, set[int]] = defaultdict(set)
@@ -598,14 +599,17 @@ async def daily_trend(
     manager: User = Depends(get_current_manager),
     db: AsyncSession = Depends(get_db),
     campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    user_id: int | None = None,
     exclude_weekends: bool = True,
 ):
     """Per-day attendance aggregates over the range: how many staff were
     expected, present, on leave, or absent-without-status (unresolved). Drives
-    the dashboard/report trend chart."""
+    the dashboard/report trend chart — narrowed to one staff member when
+    ``user_id`` is given, so it doubles as their personal daily/weekly/monthly
+    trend."""
     _validate_range(start_date, end_date)
     tz = ZoneInfo(settings.attendance_timezone)
-    staff = await _scoped_active_staff(db, manager, campus_id, None)
+    staff = await _scoped_active_staff(db, manager, campus_id, user_id)
     all_days = _all_days(start_date, end_date)
 
     # Per-day accumulators, seeded so every day in the range is present even if
@@ -737,25 +741,27 @@ async def export_reports_xlsx(
     manager: User = Depends(get_current_manager),
     db: AsyncSession = Depends(get_db),
     campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    user_id: int | None = None,
     threshold_minutes: int = Query(0, ge=0, le=240),
     exclude_weekends: bool = True,
 ):
     """One workbook with a sheet each for late/early-leave rankings and the
-    absence detail + summary, for the given date range and scope."""
+    absence detail + summary, for the given date range and scope — narrowed to
+    one staff member when ``user_id`` is given."""
     late = await late_ranking(
-        start_date, end_date, manager, db, campus_id, None, threshold_minutes, exclude_weekends, 700
+        start_date, end_date, manager, db, campus_id, user_id, threshold_minutes, exclude_weekends, 700
     )
     early = await early_leave_ranking(
-        start_date, end_date, manager, db, campus_id, None, threshold_minutes, exclude_weekends, 700
+        start_date, end_date, manager, db, campus_id, user_id, threshold_minutes, exclude_weekends, 700
     )
     late_list = await late_detail(
-        start_date, end_date, manager, db, campus_id, None, threshold_minutes, exclude_weekends, 5000
+        start_date, end_date, manager, db, campus_id, user_id, threshold_minutes, exclude_weekends, 5000
     )
     early_list = await early_leave_detail(
-        start_date, end_date, manager, db, campus_id, None, threshold_minutes, exclude_weekends, 5000
+        start_date, end_date, manager, db, campus_id, user_id, threshold_minutes, exclude_weekends, 5000
     )
-    absences = await _compute_absences(db, manager, start_date, end_date, campus_id, None, exclude_weekends)
-    summary = await absence_summary(start_date, end_date, manager, db, campus_id, exclude_weekends)
+    absences = await _compute_absences(db, manager, start_date, end_date, campus_id, user_id, exclude_weekends)
+    summary = await absence_summary(start_date, end_date, manager, db, campus_id, user_id, exclude_weekends)
 
     wb = Workbook()
 
