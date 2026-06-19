@@ -32,11 +32,14 @@ export function startWatching() {
       emit();
     },
     (err) => {
-      // 1 = PERMISSION_DENIED; others are position-unavailable/timeout.
+      // 1 = PERMISSION_DENIED; others are position-unavailable/timeout. Either
+      // way, live tracking just failed — drop any cached fix so a scan right
+      // after location is switched off can't ride on an old reading.
+      latest = null;
       permission = err.code === 1 ? "denied" : "unavailable";
       emit();
     },
-    { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 }
+    { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
   );
 }
 
@@ -50,11 +53,16 @@ export function getPermission() {
 }
 
 /**
- * The freshest usable fix for a scan. Returns the watched reading if it's
- * recent enough; otherwise asks for a one-shot position (awaiting briefly).
- * Resolves to { latitude, longitude, accuracy } or null when unavailable.
+ * The freshest usable fix for a scan. Uses the watched reading only if it
+ * arrived within the last few seconds (i.e. live tracking is actually
+ * working right now); otherwise requests a brand-new position with no
+ * browser-side caching. Resolves to { latitude, longitude, accuracy } or
+ * null when no current fix is available — callers must treat null as "no
+ * location", never reuse an older fix. (Without this, switching location
+ * off right after one real fix would let every later scan keep riding on
+ * that stale reading.)
  */
-export async function getLocationForScan({ maxAgeMs = 60000, timeout = 8000 } = {}) {
+export async function getLocationForScan({ maxAgeMs = 5000, timeout = 8000 } = {}) {
   if (latest && Date.now() - latest.ts <= maxAgeMs) {
     const { latitude, longitude, accuracy } = latest;
     return { latitude, longitude, accuracy };
@@ -78,18 +86,15 @@ export async function getLocationForScan({ maxAgeMs = 60000, timeout = 8000 } = 
         });
       },
       (err) => {
+        // A fresh read just failed (denied/off/no signal) — drop any cached
+        // fix and report "no location" rather than falling back to a stale
+        // one.
+        latest = null;
         permission = err.code === 1 ? "denied" : "unavailable";
         emit();
-        // Fall back to the last known fix (even if a bit stale) rather than
-        // nothing, so a momentary timeout doesn't block a user who is at school.
-        if (latest) {
-          const { latitude, longitude, accuracy } = latest;
-          resolve({ latitude, longitude, accuracy });
-        } else {
-          resolve(null);
-        }
+        resolve(null);
       },
-      { enableHighAccuracy: true, timeout, maximumAge: maxAgeMs }
+      { enableHighAccuracy: true, timeout, maximumAge: 0 }
     );
   });
 }
