@@ -133,21 +133,21 @@ body {
   gap: 16px;
 }
 .install__brand {
-  background: #fff;
-  border-radius: 20px;
-  padding: 12px 22px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 10px;
+  display: inline-flex;
 }
 .install__brandimg {
-  width: 150px;
+  width: 56px;
   height: auto;
   display: block;
 }
 .install__appname {
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text);
-  margin-top: -4px;
 }
 .install__title {
   font-size: 1.5rem;
