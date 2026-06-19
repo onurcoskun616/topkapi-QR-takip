@@ -179,6 +179,329 @@ body {
   max-width: 360px;
 }
 
+/* ---- Animated install demo (CSS/SVG only) ---- */
+.phone {
+  position: relative;
+  width: 196px;
+  height: 312px;
+  background: #06152b;
+  border: 6px solid #20457c;
+  border-radius: 30px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  flex: none;
+}
+.phone__notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 66px;
+  height: 15px;
+  background: #20457c;
+  border-radius: 0 0 12px 12px;
+  z-index: 6;
+}
+.phone__screen {
+  position: absolute;
+  inset: 0;
+}
+
+.demo-frame {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+}
+.demo-frame--1 {
+  animation: demoF1 6s infinite;
+}
+.demo-frame--2 {
+  animation: demoF2 6s infinite;
+}
+.demo-frame--3 {
+  animation: demoF3 6s infinite;
+}
+@keyframes demoF1 {
+  0% { opacity: 1; }
+  28% { opacity: 1; }
+  34% { opacity: 0; }
+  94% { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes demoF2 {
+  0%, 33% { opacity: 0; }
+  39%, 61% { opacity: 1; }
+  67%, 100% { opacity: 0; }
+}
+@keyframes demoF3 {
+  0%, 66% { opacity: 0; }
+  72%, 96% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.demo-browser {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #0b1f3a;
+}
+.demo-topbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 8px 8px;
+  background: #13325c;
+}
+.demo-topbar--center {
+  justify-content: center;
+}
+.demo-url {
+  font-size: 0.56rem;
+  color: #cdddf5;
+  background: #0b1f3a;
+  border-radius: 8px;
+  padding: 5px 8px;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.demo-topbar--center .demo-url {
+  flex: 0 1 auto;
+  max-width: 80%;
+}
+.demo-dots {
+  position: relative;
+  font-size: 1rem;
+  color: #fff;
+  padding: 0 4px;
+}
+.demo-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.demo-body--dim {
+  background: rgba(0, 0, 0, 0.45);
+}
+.demo-cta {
+  position: relative;
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 800;
+  font-size: 0.78rem;
+  padding: 12px 14px;
+  border-radius: 12px;
+}
+
+/* tap ripple — expanding ring, no transform so it won't fight centering */
+.demo-tap {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  border: 2px solid #fff;
+  animation: tapPulse 1.4s infinite;
+  pointer-events: none;
+}
+.demo-tap--center {
+  top: 50%;
+  left: 50%;
+  margin: -11px 0 0 -11px;
+}
+.demo-tap--dots {
+  top: -2px;
+  left: -2px;
+}
+.demo-tap--menu,
+.demo-tap--sheet {
+  top: 50%;
+  right: 10px;
+  margin-top: -11px;
+}
+.demo-tap--share {
+  top: -3px;
+  left: -3px;
+}
+@keyframes tapPulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.55); }
+  70% { box-shadow: 0 0 0 13px rgba(255, 255, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+
+/* Android dropdown menu */
+.demo-menu {
+  align-self: flex-end;
+  width: 74%;
+  margin: 4px 6px 0 0;
+  background: #fff;
+  color: #222;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.45);
+}
+.demo-menu__item {
+  display: block;
+  position: relative;
+  font-size: 0.66rem;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+}
+.demo-menu__item--hot {
+  background: #fff6da;
+  font-weight: 800;
+  color: #7a5b00;
+}
+
+/* iOS share sheet + bottom bar */
+.demo-iosbar {
+  margin-top: auto;
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  background: #13325c;
+}
+.demo-sharebtn {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  background: #fff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.demo-share {
+  width: 18px;
+  height: 18px;
+}
+.demo-sheet {
+  margin-top: auto;
+  background: #fff;
+  color: #222;
+  border-radius: 16px 16px 0 0;
+  padding: 8px;
+}
+.demo-sheet__row {
+  display: block;
+  position: relative;
+  font-size: 0.68rem;
+  padding: 10px 8px;
+}
+.demo-sheet__row--hot {
+  background: #eef2ff;
+  border-radius: 10px;
+  font-weight: 800;
+  color: #1b3a8a;
+}
+.demo-sheet__plus {
+  font-weight: 800;
+}
+
+/* install confirmation dialog (native-button variant) */
+.demo-dialog {
+  width: 78%;
+  background: #fff;
+  color: #222;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+}
+.demo-dialog__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+.demo-dialog__title {
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+.demo-dialog__btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 2px;
+}
+.demo-dialog__btn {
+  position: relative;
+  font-size: 0.7rem;
+  color: #1b3a8a;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+.demo-dialog__btn--hot {
+  background: #1b3a8a;
+  color: #fff;
+  border-radius: 8px;
+}
+
+/* home-screen icon pop, synced to frame 3 */
+.demo-home {
+  flex: 1;
+  background: linear-gradient(160deg, #0b1f3a, #163a6c);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.demo-home__pop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  animation: popCycle 6s infinite;
+}
+.demo-home__icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55);
+}
+.demo-home__label {
+  font-size: 0.68rem;
+  color: var(--text);
+}
+.demo-home__check {
+  font-size: 0.66rem;
+  color: #8ff0ab;
+  font-weight: 700;
+}
+@keyframes popCycle {
+  0%, 66% { transform: scale(0.2); opacity: 0; }
+  73% { transform: scale(1.12); opacity: 1; }
+  80%, 96% { transform: scale(1); opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Respect reduced-motion: skip the loop, show the end result statically. */
+@media (prefers-reduced-motion: reduce) {
+  .demo-frame--1,
+  .demo-frame--2 {
+    animation: none;
+    opacity: 0;
+  }
+  .demo-frame--3 {
+    animation: none;
+    opacity: 1;
+  }
+  .demo-home__pop {
+    animation: none;
+    transform: none;
+    opacity: 1;
+  }
+  .demo-tap {
+    animation: none;
+  }
+}
+
 /* ---- Scanner ---- */
 .scanner {
   position: relative;

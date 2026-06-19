@@ -7,6 +7,7 @@ import {
   isIOS,
   wasInstalled,
 } from "../installPrompt";
+import PhoneDemo from "./PhoneDemo";
 
 // Remembers a "continue in browser" choice for the current tab session only, so
 // the install nudge reappears on the next visit (we want install-first) without
@@ -30,6 +31,7 @@ export default function InstallGate({ children }) {
 
   const hasPrompt = !!getDeferredPrompt();
   const ios = isIOS();
+  const demoVariant = hasPrompt ? "button" : ios ? "ios" : "android";
 
   const onInstall = async () => {
     setBusy(true);
@@ -45,7 +47,6 @@ export default function InstallGate({ children }) {
 
   return (
     <div className="screen center install">
-      <img src="/pwa-512.png" alt="" className="install__logo" />
       <h1 className="install__title">Topkapı Yoklama</h1>
 
       {wasInstalled() ? (
@@ -62,6 +63,8 @@ export default function InstallGate({ children }) {
             Devam etmeden önce uygulamayı telefonunuzun <b>ana ekranına ekleyin</b>.
             Kayıt ve giriş/çıkış işlemleri yalnızca uygulama üzerinden yapılır.
           </p>
+
+          <PhoneDemo variant={demoVariant} />
 
           {hasPrompt ? (
             <button
