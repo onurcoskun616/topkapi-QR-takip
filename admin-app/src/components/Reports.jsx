@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth";
-import { api, downloadLogsXlsx, downloadReportsXlsx } from "../api";
+import { api, downloadLogsXlsx, downloadReportsXlsx, downloadMonthlyHoursXlsx } from "../api";
+
+const MONTH_NAMES = [
+  "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+  "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
+];
 
 function iso(d) {
   const off = d.getTimezoneOffset();
@@ -212,6 +217,13 @@ export default function Reports({ isHq }) {
   const [earlyLeaveThreshold, setEarlyLeaveThreshold] = useState(3);
   const [unresolvedThreshold, setUnresolvedThreshold] = useState(2);
 
+  // Monthly hours (puantaj) has its own month picker, independent of the date
+  // range above, since payroll is always reckoned a whole calendar month.
+  const _now = new Date();
+  const [monthSel, setMonthSel] = useState({ year: _now.getFullYear(), month: _now.getMonth() + 1 });
+  const [monthly, setMonthly] = useState([]);
+  const [monthlyBusy, setMonthlyBusy] = useState(false);
+
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -293,6 +305,46 @@ export default function Reports({ isHq }) {
     earlyLeaveThreshold,
     unresolvedThreshold,
   ]);
+
+  // Monthly hours loads on its own month/scope, separate from the range above.
+  useEffect(() => {
+    let cancelled = false;
+    setMonthlyBusy(true);
+    api
+      .monthlyHours(token, {
+        year: monthSel.year,
+        month: monthSel.month,
+        campusId: isHq ? campusId || undefined : undefined,
+        userId: userId || undefined,
+        excludeWeekends,
+      })
+      .then((res) => {
+        if (!cancelled) setMonthly(res.entries || []);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      })
+      .finally(() => {
+        if (!cancelled) setMonthlyBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, monthSel.year, monthSel.month, campusId, userId, excludeWeekends, isHq]);
+
+  const onMonthlyXlsx = async () => {
+    try {
+      await downloadMonthlyHoursXlsx(token, {
+        year: monthSel.year,
+        month: monthSel.month,
+        campusId: isHq ? campusId || undefined : undefined,
+        userId: userId || undefined,
+        excludeWeekends,
+      });
+    } catch (e) {
+      setError(e.message);
+    }
+  };
 
   const onLogsXlsx = async () => {
     try {
@@ -423,6 +475,104 @@ export default function Reports({ isHq }) {
         <div className="kpi">
           <div className="kpi__value">{early.length}</div>
           <div className="kpi__label">Erken çıkan personel sayısı</div>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="filters">
+          <h2 className="card__title" style={{ margin: 0 }}>
+            Aylık Mesai / Puantaj
+          </h2>
+          <label className="field field--inline">
+            <span>Ay</span>
+            <select
+              value={monthSel.month}
+              onChange={(e) => setMonthSel({ ...monthSel, month: Number(e.target.value) })}
+            >
+              {MONTH_NAMES.map((name, i) => (
+                <option key={i} value={i + 1}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field field--inline">
+            <span>Yıl</span>
+            <input
+              type="number"
+              min={2020}
+              max={2100}
+              style={{ width: 90 }}
+              value={monthSel.year}
+              onChange={(e) => setMonthSel({ ...monthSel, year: Number(e.target.value) })}
+            />
+          </label>
+          <div className="grow" />
+          <button className="btn btn--primary" onClick={onMonthlyXlsx}>
+            Puantaj Excel İndir
+          </button>
+        </div>
+        <p className="muted small">
+          Seçili ayda her personelin toplam çalışma saati, geldiği gün, geç
+          dakikaları ve devamsız/izinli gün sayısı. Çalışma saati o günkü ilk
+          giriş ile son çıkış arasıdır; çıkış yapılmayan günlerde 23:59 otomatik
+          çıkışı devreye girer (Geldiği Gün ile Tam Gün farkı bu durumu gösterir).
+          {isHq && !campusId ? " Kampüs filtresini yukarıdan değiştirebilirsiniz." : ""}
+        </p>
+        {monthlyBusy && <p className="muted">Yükleniyor…</p>}
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Personel</th>
+                <th>Görev / Branş</th>
+                {isHq && <th>Kampüs</th>}
+                <th>Planlı Gün</th>
+                <th>Geldiği Gün</th>
+                <th>Tam Gün</th>
+                <th>Toplam Saat</th>
+                <th>Toplam Geç (dk)</th>
+                <th>Devamsız Gün</th>
+                <th>İzinli Gün</th>
+              </tr>
+            </thead>
+            <tbody>
+              {monthly.length === 0 ? (
+                <tr>
+                  <td colSpan={isHq ? 10 : 9} className="muted">
+                    Kayıt yok.
+                  </td>
+                </tr>
+              ) : (
+                monthly.map((m) => (
+                  <tr key={m.user_id}>
+                    <td>{m.full_name}</td>
+                    <td className="muted small">{roleLabel(m)}</td>
+                    {isHq && <td className="muted small">{m.campus_name || "—"}</td>}
+                    <td>{m.expected_days}</td>
+                    <td>{m.present_days}</td>
+                    <td>{m.worked_days}</td>
+                    <td><strong>{m.total_hours}</strong></td>
+                    <td>
+                      {m.total_late_minutes > 0 ? (
+                        <span className="badge badge--out">{m.total_late_minutes}</span>
+                      ) : (
+                        0
+                      )}
+                    </td>
+                    <td>
+                      {m.absent_days > 0 ? (
+                        <span className="badge badge--out">{m.absent_days}</span>
+                      ) : (
+                        0
+                      )}
+                    </td>
+                    <td>{m.leave_days}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 

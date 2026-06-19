@@ -6,6 +6,7 @@ one campus). "Late" / "early leave" are computed against each staff member's
 *campus* shift hours (``Campus.shift_start`` / ``shift_end``, settable only by
 hq) plus a caller-supplied ``threshold_minutes`` grace window.
 """
+import calendar
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
@@ -48,6 +49,8 @@ from ..schemas import (
     LateRankingEntry,
     LocationAlertEntry,
     LocationAlertsResponse,
+    MonthlyHoursEntry,
+    MonthlyHoursResponse,
     RiskReportResponse,
     RiskStaffEntry,
     UnresolvedReminderResponse,
@@ -893,6 +896,163 @@ async def location_alerts(
             )
         )
     return LocationAlertsResponse(count=len(entries), entries=entries)
+
+
+@router.get("/monthly-hours", response_model=MonthlyHoursResponse)
+async def monthly_hours(
+    year: int = Query(..., ge=2020, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+    campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    user_id: int | None = None,
+    exclude_weekends: bool = True,
+):
+    """Per-staff monthly attendance totals for payroll (puantaj): worked hours,
+    days present, cumulative late minutes, and absent/leave day counts over the
+    days each person was scheduled to work.
+
+    Worked hours are the sum of (last OUT − first IN) per day. Note that on a
+    day where someone forgot to scan out, the 23:59 auto-close OUT stands in as
+    their last OUT, so that day's hours run long — ``worked_days`` vs
+    ``present_days`` surfaces such gaps.
+    """
+    start_date = date(year, month, 1)
+    end_date = date(year, month, calendar.monthrange(year, month)[1])
+    tz = ZoneInfo(settings.attendance_timezone)
+
+    staff = await _scoped_active_staff(db, manager, campus_id, user_id)
+    if not staff:
+        return MonthlyHoursResponse(
+            year=year, month=month, start_date=start_date, end_date=end_date, entries=[]
+        )
+
+    logs = await _logs_for_staff(db, [s.id for s in staff], start_date, end_date)
+    grouped = _group_by_staff_day(logs, tz)
+    grouped_by_user: dict[int, list[tuple[date, _DayLogs]]] = defaultdict(list)
+    for (uid, d), bucket in grouped.items():
+        grouped_by_user[uid].append((d, bucket))
+
+    campuses = await _campus_shift_map(db)
+    national_holidays, holidays_by_campus = await _load_holidays(db, start_date, end_date)
+    all_days = _all_days(start_date, end_date)
+    names = await _campus_names_map(db)
+
+    leave_rows = await db.execute(
+        select(LeaveRecord).where(
+            LeaveRecord.user_id.in_([s.id for s in staff]),
+            LeaveRecord.status == LeaveStatus.active,
+            LeaveRecord.start_date <= end_date,
+            LeaveRecord.end_date >= start_date,
+        )
+    )
+    leaves_by_staff: dict[int, list[LeaveRecord]] = defaultdict(list)
+    for leave in leave_rows.scalars().all():
+        leaves_by_staff[leave.user_id].append(leave)
+
+    entries: list[MonthlyHoursEntry] = []
+    for s in staff:
+        campus = campuses.get(s.campus_id) if s.campus_id else None
+        expected = _expected_days_for_staff(
+            s, all_days, exclude_weekends, national_holidays, holidays_by_campus
+        )
+        staff_leaves = leaves_by_staff.get(s.id, [])
+
+        # Worked hours / present / complete-day counts use every day with scans
+        # (someone may have worked an unscheduled day too).
+        total_seconds = 0.0
+        worked_days = 0
+        present_days = 0
+        for _d, bucket in grouped_by_user.get(s.id, []):
+            if bucket.any_log:
+                present_days += 1
+            if bucket.first_in and bucket.last_out and bucket.last_out > bucket.first_in:
+                total_seconds += (bucket.last_out - bucket.first_in).total_seconds()
+                worked_days += 1
+
+        # Lateness + absent/leave classification only over scheduled days.
+        total_late = 0.0
+        absent_days = 0
+        leave_days = 0
+        for d in expected:
+            bucket = grouped.get((s.id, d))
+            if bucket and bucket.any_log:
+                if campus and campus.shift_start and bucket.first_in:
+                    shift_start_local = datetime.combine(d, campus.shift_start, tzinfo=tz)
+                    minutes_late = (bucket.first_in - shift_start_local).total_seconds() / 60
+                    if minutes_late > 0:
+                        total_late += minutes_late
+                continue
+            covering = next((lv for lv in staff_leaves if lv.start_date <= d <= lv.end_date), None)
+            if covering:
+                leave_days += 1
+            else:
+                absent_days += 1
+
+        entries.append(
+            MonthlyHoursEntry(
+                user_id=s.id,
+                full_name=s.full_name,
+                job_title=s.job_title,
+                branch=s.branch,
+                campus_name=names.get(s.campus_id) if s.campus_id else None,
+                expected_days=len(expected),
+                present_days=present_days,
+                worked_days=worked_days,
+                total_hours=round(total_seconds / 3600, 1),
+                total_late_minutes=round(total_late),
+                absent_days=absent_days,
+                leave_days=leave_days,
+            )
+        )
+
+    entries.sort(key=lambda e: (e.campus_name or "", e.full_name))
+    return MonthlyHoursResponse(
+        year=year, month=month, start_date=start_date, end_date=end_date, entries=entries
+    )
+
+
+@router.get("/monthly-hours.xlsx", response_class=StreamingResponse)
+async def export_monthly_hours_xlsx(
+    year: int = Query(..., ge=2020, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+    campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    user_id: int | None = None,
+    exclude_weekends: bool = True,
+):
+    """The monthly-hours (puantaj) report as a single-sheet workbook."""
+    report = await monthly_hours(year, month, manager, db, campus_id, user_id, exclude_weekends)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Aylık Mesai"
+    ws.append(
+        [
+            "Personel", "Görev", "Branş", "Kampüs",
+            "Planlı Gün", "Geldiği Gün", "Tam Gün (Giriş+Çıkış)",
+            "Toplam Saat", "Toplam Geç (dk)", "Devamsız Gün", "İzinli Gün",
+        ]
+    )
+    for e in report.entries:
+        ws.append(
+            [
+                e.full_name, e.job_title or "", e.branch or "", e.campus_name or "",
+                e.expected_days, e.present_days, e.worked_days,
+                e.total_hours, e.total_late_minutes, e.absent_days, e.leave_days,
+            ]
+        )
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    filename = f"aylik_mesai_{year}_{month:02d}.xlsx"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/export.xlsx", response_class=StreamingResponse)

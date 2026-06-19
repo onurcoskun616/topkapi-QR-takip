@@ -536,6 +536,33 @@ class UnresolvedReminderResponse(BaseModel):
     entries: list[AbsenceDayEntry]
 
 
+class MonthlyHoursEntry(BaseModel):
+    """One staff member's monthly totals for payroll/puantaj: worked hours
+    (sum of first-IN→last-OUT each day), days present, cumulative late
+    minutes, and absent/leave day counts over their scheduled work days."""
+
+    user_id: int
+    full_name: str
+    job_title: str | None = None   # görev
+    branch: str | None = None      # branş
+    campus_name: str | None = None
+    expected_days: int       # days they were scheduled to work this month
+    present_days: int        # days with at least one scan
+    worked_days: int         # days with a complete IN+OUT pair
+    total_hours: float       # Σ (last OUT − first IN) across days, in hours
+    total_late_minutes: int  # cumulative lateness vs campus shift start
+    absent_days: int         # scheduled days with no scan and no leave
+    leave_days: int          # scheduled days covered by an active leave
+
+
+class MonthlyHoursResponse(BaseModel):
+    year: int
+    month: int
+    start_date: date
+    end_date: date
+    entries: list[MonthlyHoursEntry]
+
+
 class DailyTrendEntry(BaseModel):
     """Aggregate attendance for one calendar day across all in-scope staff —
     the building block for the dashboard/report trend chart."""

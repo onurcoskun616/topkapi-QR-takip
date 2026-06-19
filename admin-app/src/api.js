@@ -238,6 +238,19 @@ export const api = {
       { token }
     ),
 
+  // --- monthly hours / payroll (puantaj) ---------------------------------
+  monthlyHours: (token, { year, month, campusId, userId, excludeWeekends } = {}) =>
+    request(
+      `/api/reports/monthly-hours${qs({
+        year,
+        month,
+        campus_id: campusId,
+        user_id: userId,
+        exclude_weekends: excludeWeekends,
+      })}`,
+      { token }
+    ),
+
   // --- daily attendance trend (chart data) -------------------------------
   dailyTrend: (token, { startDate, endDate, campusId, userId, excludeWeekends } = {}) =>
     request(
@@ -406,6 +419,26 @@ export async function downloadLogsXlsx(token, { userId, campusId, day, startDate
     { user_id: userId, campus_id: campusId, day, start_date: startDate, end_date: endDate },
     `attendance_${day || "all"}.xlsx`,
     "Excel dışa aktarım başarısız"
+  );
+}
+
+/** Trigger a browser download of the monthly-hours (puantaj) workbook. */
+export async function downloadMonthlyHoursXlsx(
+  token,
+  { year, month, campusId, userId, excludeWeekends } = {}
+) {
+  await downloadFile(
+    token,
+    "/api/reports/monthly-hours.xlsx",
+    {
+      year,
+      month,
+      campus_id: campusId,
+      user_id: userId,
+      exclude_weekends: excludeWeekends,
+    },
+    `aylik_mesai_${year}_${String(month).padStart(2, "0")}.xlsx`,
+    "Aylık mesai dışa aktarım başarısız"
   );
 }
 
