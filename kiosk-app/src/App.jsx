@@ -306,8 +306,8 @@ export default function App() {
   // compact card in the bottom-right corner — no clock, no countdown clutter.
   if (announcement) {
     const cornerQr = Math.max(
-      150,
-      Math.min(280, Math.min(window.innerWidth, window.innerHeight) * 0.26)
+      180,
+      Math.min(340, Math.min(window.innerWidth, window.innerHeight) * 0.32)
     );
     return (
       <div className="kiosk kiosk--announce">
