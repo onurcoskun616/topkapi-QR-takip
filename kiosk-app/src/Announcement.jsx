@@ -1,7 +1,7 @@
 // Full-screen kiosk notice. With an image or video, the media is the hero
 // (letter-boxed so it's never cropped) and any title/body sits in a gradient
 // caption at the bottom; text-only notices are shown large and centered.
-export default function Announcement({ data, soundOn = false }) {
+export default function Announcement({ data, soundOn = false, loop = true, onVideoEnded }) {
   const { title, body, image_url, video_url } = data;
   const hasText = Boolean(title || body);
 
@@ -13,8 +13,9 @@ export default function Announcement({ data, soundOn = false }) {
           src={video_url}
           autoPlay
           muted={!soundOn}
-          loop
+          loop={loop}
           playsInline
+          onEnded={onVideoEnded}
         />
         {hasText && (
           <div className="announce__caption">

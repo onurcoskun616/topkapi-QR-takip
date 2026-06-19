@@ -38,6 +38,10 @@ const TOKEN_STATUS_POLL_MS = 800;
 // active — how long each stays on screen before rotating to the next.
 const ANNOUNCE_POLL_MS = 20000;
 const ANNOUNCE_ROTATE_MS = 12000;
+// Safety net for video notices: normally we advance on the video's own
+// "ended" event so a clip always plays to completion, but if playback stalls
+// (bad network, decode error) this guarantees the kiosk doesn't get stuck.
+const VIDEO_FALLBACK_ROTATE_MS = 60000;
 
 /**
  * Full-screen kiosk:
@@ -264,19 +268,33 @@ export default function App() {
     };
   }, []);
 
+  // The notice currently on screen (rotated by the effect below), if any.
+  const announcement = announcements.length
+    ? announcements[annIndex % announcements.length]
+    : null;
+
+  // Advance to the next notice, looping back to the first.
+  const advanceAnnouncement = useCallback(() => {
+    setAnnIndex((i) => (announcements.length ? (i + 1) % announcements.length : 0));
+  }, [announcements.length]);
+
   // Rotate through multiple active notices; reset to the first when the set
-  // shrinks so the index never points past the end.
+  // shrinks so the index never points past the end. Image/text notices
+  // rotate on a fixed timer; a video notice instead advances when it
+  // actually finishes playing (the <video> onEnded handler passed down to
+  // Announcement), so a longer clip is never cut off mid-play — this timer
+  // then only acts as a fallback for that case. Depending on the video URL
+  // (not the announcements array itself) keeps a periodic re-fetch with the
+  // same content from resetting the timer mid-play.
   useEffect(() => {
     if (announcements.length <= 1) {
       setAnnIndex(0);
       return;
     }
-    const interval = setInterval(
-      () => setAnnIndex((i) => (i + 1) % announcements.length),
-      ANNOUNCE_ROTATE_MS
-    );
-    return () => clearInterval(interval);
-  }, [announcements.length]);
+    const delay = announcement?.video_url ? VIDEO_FALLBACK_ROTATE_MS : ANNOUNCE_ROTATE_MS;
+    const timer = setTimeout(advanceAnnouncement, delay);
+    return () => clearTimeout(timer);
+  }, [announcements.length, annIndex, announcement?.video_url, advanceAnnouncement]);
 
   const progress = Math.min(100, Math.max(0, (remaining / ttl) * 100));
   const isStale = remaining <= 0 || !token;
@@ -290,11 +308,6 @@ export default function App() {
   const qrSize = isLandscape
     ? Math.min(window.innerWidth * 0.22, window.innerHeight * 0.55)
     : Math.min(window.innerWidth * 0.46, window.innerHeight * 0.36);
-
-  // The notice currently on screen (rotated by the effect above), if any.
-  const announcement = announcements.length
-    ? announcements[annIndex % announcements.length]
-    : null;
 
   // Whether any active notice carries a video — only then is a sound toggle
   // meaningful (images and text have nothing to play).
@@ -328,7 +341,12 @@ export default function App() {
     return (
       <div className="kiosk kiosk--announce">
         {overlays}
-        <Announcement data={announcement} soundOn={soundOn} />
+        <Announcement
+          data={announcement}
+          soundOn={soundOn}
+          loop={announcements.length <= 1}
+          onVideoEnded={advanceAnnouncement}
+        />
         <div className={`qr-corner ${isStale ? "qr-corner--stale" : ""}`}>
           <div className="qr-corner__code">
             {token ? (
