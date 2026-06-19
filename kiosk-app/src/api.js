@@ -51,9 +51,9 @@ export async function fetchRecentScans(campusId, signal) {
 
 /**
  * Poll the notices this kiosk's campus should display right now (full-screen
- * announcements / images created from the admin panel). Image paths are made
- * absolute against the API base so <img> can load them directly. Returns an
- * empty list when no campus is configured.
+ * announcements / images / videos created from the admin panel). Media paths
+ * are made absolute against the API base so <img>/<video> can load them
+ * directly. Returns an empty list when no campus is configured.
  */
 export async function fetchAnnouncements(campusId, signal) {
   if (!campusId) return { announcements: [] };
@@ -69,6 +69,7 @@ export async function fetchAnnouncements(campusId, signal) {
     announcements: (data.announcements || []).map((a) => ({
       ...a,
       image_url: a.image_url ? `${API_BASE_URL}${a.image_url}` : null,
+      video_url: a.video_url ? `${API_BASE_URL}${a.video_url}` : null,
     })),
   };
 }

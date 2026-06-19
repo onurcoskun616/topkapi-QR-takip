@@ -51,7 +51,7 @@ def test_expired_qr_token_rejected(monkeypatch):
     monkeypatch.setattr(security.settings, "qr_token_ttl_seconds", -1)
     data = security.create_qr_token()
     with pytest.raises(ExpiredSignatureError):
-        decode_qr_token(data["token"])
+        security.decode_qr_token(data["token"])
 
 
 def test_access_token_carries_session_id():

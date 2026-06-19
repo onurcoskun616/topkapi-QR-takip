@@ -31,7 +31,7 @@ export default function Announcements({ isHq }) {
   const [items, setItems] = useState([]);
   const [campuses, setCampuses] = useState([]);
   const [form, setForm] = useState(EMPTY);
-  const [image, setImage] = useState(null);
+  const [media, setMedia] = useState(null);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -57,8 +57,8 @@ export default function Announcements({ isHq }) {
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    if (!form.title && !form.body && !image) {
-      setError("Bir başlık, metin veya görsel ekleyin.");
+    if (!form.title && !form.body && !media) {
+      setError("Bir başlık, metin, görsel veya video ekleyin.");
       return;
     }
     setBusy(true);
@@ -71,11 +71,11 @@ export default function Announcements({ isHq }) {
         campusId: isHq && form.campus_id ? Number(form.campus_id) : null,
         startsAt: form.starts_at || null,
         endsAt: form.ends_at || null,
-        image,
+        media,
       });
       setNotice("Duyuru yayınlandı. Kiosk ekranlarında birkaç saniye içinde görünür.");
       setForm(EMPTY);
-      setImage(null);
+      setMedia(null);
       e.target.reset?.();
       await load();
     } catch (err) {
@@ -113,8 +113,9 @@ export default function Announcements({ isHq }) {
         <h2 className="card__title">Yeni Duyuru / Görsel</h2>
         <p className="muted small">
           Kiosk (tablet) ekranında tam ekran gösterilir; QR kod sağ alt köşeye
-          küçülür. Özel gün tebriği, genel duyuru veya etkinlik görseli
-          paylaşabilirsiniz. Bitiş zamanı verirseniz o anda otomatik kaybolur;
+          küçülür. Özel gün tebriği, genel duyuru veya etkinlik için görsel ya
+          da kısa bir video paylaşabilirsiniz (video sessiz ve döngülü oynar).
+          Bitiş zamanı verirseniz o anda otomatik kaybolur;
           vermezseniz siz kaldırana (veya pasife alana) kadar kalır.
           {isHq
             ? " Kampüs seçmezseniz tüm kampüslerin kiosklarında gösterilir."
@@ -141,11 +142,11 @@ export default function Announcements({ isHq }) {
             />
           </label>
           <label className="field">
-            <span>Görsel (isteğe bağlı, en fazla 5 MB)</span>
+            <span>Görsel veya video (isteğe bağlı, görsel en fazla 5 MB, video en fazla 25 MB)</span>
             <input
               type="file"
-              accept="image/*"
-              onChange={(e) => setImage(e.target.files?.[0] || null)}
+              accept="image/*,video/*"
+              onChange={(e) => setMedia(e.target.files?.[0] || null)}
             />
           </label>
           <div className="row two">
@@ -195,7 +196,7 @@ export default function Announcements({ isHq }) {
           <table className="table">
             <thead>
               <tr>
-                <th>Görsel</th>
+                <th>Medya</th>
                 <th>İçerik</th>
                 <th>Kapsam</th>
                 <th>Bitiş</th>
@@ -226,6 +227,19 @@ export default function Announcements({ isHq }) {
                               height: 44,
                               objectFit: "cover",
                               borderRadius: 6,
+                            }}
+                          />
+                        ) : a.video_url ? (
+                          <video
+                            src={`${apiBaseUrl}${a.video_url}`}
+                            muted
+                            preload="metadata"
+                            style={{
+                              width: 64,
+                              height: 44,
+                              objectFit: "cover",
+                              borderRadius: 6,
+                              background: "#000",
                             }}
                           />
                         ) : (

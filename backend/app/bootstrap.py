@@ -40,6 +40,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("campuses", "latitude", "DOUBLE PRECISION"),
     ("campuses", "longitude", "DOUBLE PRECISION"),
     ("campuses", "geofence_radius_m", "INTEGER"),
+    ("announcements", "video_data", "BYTEA"),
+    ("announcements", "video_mime", "VARCHAR(80)"),
 ]
 
 # Unique indexes introduced after ``users`` was first created: (table, column,

@@ -396,13 +396,15 @@ class HolidayResponse(BaseModel):
 # Announcements — full-screen kiosk notices (text and/or image)
 # --------------------------------------------------------------------------- #
 class AnnouncementResponse(BaseModel):
-    """Admin-panel view of a notice (metadata only — image fetched separately)."""
+    """Admin-panel view of a notice (metadata only — image/video fetched separately)."""
 
     id: int
     title: str | None = None
     body: str | None = None
     has_image: bool = False
     image_url: str | None = None  # API path; the client prepends the API base
+    has_video: bool = False
+    video_url: str | None = None  # API path; the client prepends the API base
     campus_id: int | None = None
     campus_name: str | None = None
     active: bool = True
@@ -422,6 +424,7 @@ class KioskAnnouncement(BaseModel):
     title: str | None = None
     body: str | None = None
     image_url: str | None = None  # API path; the client prepends the API base
+    video_url: str | None = None  # API path; the client prepends the API base
 
 
 class KioskAnnouncementsResponse(BaseModel):

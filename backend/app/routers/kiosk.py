@@ -43,7 +43,7 @@ from ..schemas import (
     RecentScansResponse,
 )
 from ..services import day_bounds_utc
-from .announcements import image_path, is_visible
+from .announcements import image_path, is_visible, video_path
 
 router = APIRouter(prefix="/api/kiosk", tags=["kiosk"])
 
@@ -159,6 +159,7 @@ async def kiosk_announcements(
                 title=a.title,
                 body=a.body,
                 image_url=image_path(a.id) if a.image_data is not None else None,
+                video_url=video_path(a.id) if a.video_data is not None else None,
             )
             for a in visible
         ]

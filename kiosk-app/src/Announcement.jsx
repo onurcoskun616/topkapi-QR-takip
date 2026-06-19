@@ -1,9 +1,30 @@
-// Full-screen kiosk notice. With an image, the photo is the hero (letter-boxed
-// so it's never cropped) and any title/body sits in a gradient caption at the
-// bottom; text-only notices are shown large and centered.
+// Full-screen kiosk notice. With an image or video, the media is the hero
+// (letter-boxed so it's never cropped) and any title/body sits in a gradient
+// caption at the bottom; text-only notices are shown large and centered.
 export default function Announcement({ data }) {
-  const { title, body, image_url } = data;
+  const { title, body, image_url, video_url } = data;
   const hasText = Boolean(title || body);
+
+  if (video_url) {
+    return (
+      <div className="announce announce--image">
+        <video
+          className="announce__img"
+          src={video_url}
+          autoPlay
+          muted
+          loop
+          playsInline
+        />
+        {hasText && (
+          <div className="announce__caption">
+            {title && <h2 className="announce__title">{title}</h2>}
+            {body && <p className="announce__body">{body}</p>}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (image_url) {
     return (

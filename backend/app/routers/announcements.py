@@ -23,6 +23,7 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     Response,
     UploadFile,
     status,
@@ -41,14 +42,21 @@ from ..schemas import (
 
 router = APIRouter(prefix="/api/announcements", tags=["announcements"])
 
-# Cap uploads so a multi-megapixel phone photo can't bloat a DB row (and the
-# kiosk download). ~5 MB comfortably covers a good-quality JPEG banner.
+# Cap uploads so a multi-megapixel phone photo (or a long video) can't bloat a
+# DB row (and the kiosk download). ~5 MB comfortably covers a good-quality
+# JPEG banner; ~25 MB covers a short (15-30s), compressed celebration clip.
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_VIDEO_BYTES = 25 * 1024 * 1024
 
 
 def image_path(announcement_id: int) -> str:
     """The public API path the kiosk/admin use to fetch a notice's image."""
     return f"/api/announcements/{announcement_id}/image"
+
+
+def video_path(announcement_id: int) -> str:
+    """The public API path the kiosk/admin use to fetch a notice's video."""
+    return f"/api/announcements/{announcement_id}/video"
 
 
 def is_visible(ann: Announcement, now_utc: datetime) -> bool:
@@ -99,6 +107,8 @@ def _to_response(ann: Announcement, names: dict[int, str]) -> AnnouncementRespon
         body=ann.body,
         has_image=ann.image_data is not None,
         image_url=image_path(ann.id) if ann.image_data is not None else None,
+        has_video=ann.video_data is not None,
+        video_url=video_path(ann.id) if ann.video_data is not None else None,
         campus_id=ann.campus_id,
         campus_name=names.get(ann.campus_id) if ann.campus_id else None,
         active=ann.active,
@@ -145,32 +155,45 @@ async def create_announcement(
     campus_id: str | None = Form(None),
     starts_at: str | None = Form(None),
     ends_at: str | None = Form(None),
-    image: UploadFile | None = File(None),
+    media: UploadFile | None = File(None),
 ):
     title = (title or "").strip() or None
     body = (body or "").strip() or None
 
-    # Read + validate the optional image.
+    # Read + validate the optional image/video (mutually exclusive — one file
+    # field, routed by its content type).
     image_data: bytes | None = None
     image_mime: str | None = None
-    if image is not None and image.filename:
-        if not (image.content_type or "").startswith("image/"):
+    video_data: bytes | None = None
+    video_mime: str | None = None
+    if media is not None and media.filename:
+        content_type = media.content_type or ""
+        if content_type.startswith("image/"):
+            image_data = await media.read()
+            if len(image_data) > MAX_IMAGE_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Görsel en fazla 5 MB olabilir.",
+                )
+            image_mime = content_type
+        elif content_type.startswith("video/"):
+            video_data = await media.read()
+            if len(video_data) > MAX_VIDEO_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Video en fazla 25 MB olabilir.",
+                )
+            video_mime = content_type
+        else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Yalnızca görsel dosyası yükleyebilirsiniz.",
+                detail="Yalnızca görsel veya video dosyası yükleyebilirsiniz.",
             )
-        image_data = await image.read()
-        if len(image_data) > MAX_IMAGE_BYTES:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Görsel en fazla 5 MB olabilir.",
-            )
-        image_mime = image.content_type
 
-    if not title and not body and image_data is None:
+    if not title and not body and image_data is None and video_data is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Bir başlık, metin veya görsel ekleyin.",
+            detail="Bir başlık, metin, görsel veya video ekleyin.",
         )
 
     # Scope: a director is pinned to their own campus; hq picks (null = all).
@@ -198,6 +221,8 @@ async def create_announcement(
         body=body,
         image_data=image_data,
         image_mime=image_mime,
+        video_data=video_data,
+        video_mime=video_mime,
         campus_id=scope_campus_id,
         active=True,
         starts_at=starts,
@@ -269,4 +294,63 @@ async def get_announcement_image(
         content=ann.image_data,
         media_type=ann.image_mime or "image/jpeg",
         headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@router.get("/{announcement_id}/video")
+async def get_announcement_video(
+    announcement_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public: the kiosk fetches the notice's video here.
+
+    Honours a ``Range`` request header (single range only) and replies
+    ``206 Partial Content`` when present — some browsers (notably Safari/iOS)
+    refuse to play ``<video>`` at all unless the server supports ranged
+    requests, even for a short clip that easily fits in one response.
+    """
+    ann = await db.get(Announcement, announcement_id)
+    if ann is None or ann.video_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Video bulunamadı."
+        )
+    data = ann.video_data
+    size = len(data)
+    media_type = ann.video_mime or "video/mp4"
+
+    range_header = request.headers.get("range")
+    if range_header:
+        try:
+            range_spec = range_header.strip().removeprefix("bytes=")
+            start_s, _, end_s = range_spec.partition("-")
+            start = int(start_s) if start_s else 0
+            end = int(end_s) if end_s else size - 1
+        except ValueError:
+            start, end = 0, size - 1
+        end = min(end, size - 1)
+        if start >= size or start > end:
+            raise HTTPException(
+                status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE,
+                headers={"Content-Range": f"bytes */{size}"},
+            )
+        chunk = data[start : end + 1]
+        return Response(
+            content=chunk,
+            status_code=status.HTTP_206_PARTIAL_CONTENT,
+            media_type=media_type,
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{size}",
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "public, max-age=86400",
+            },
+        )
+
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "public, max-age=86400",
+        },
     )

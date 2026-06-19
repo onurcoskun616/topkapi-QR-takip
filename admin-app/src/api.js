@@ -181,16 +181,16 @@ export const api = {
   listAnnouncements: (token, { campusId } = {}) =>
     request(`/api/announcements${qs({ campus_id: campusId })}`, { token }),
 
-  // Create with optional image → multipart/form-data (let the browser set the
-  // boundary; do NOT set Content-Type manually).
-  createAnnouncement: async (token, { title, body, campusId, startsAt, endsAt, image }) => {
+  // Create with optional image/video → multipart/form-data (let the browser
+  // set the boundary; do NOT set Content-Type manually).
+  createAnnouncement: async (token, { title, body, campusId, startsAt, endsAt, media }) => {
     const fd = new FormData();
     if (title) fd.set("title", title);
     if (body) fd.set("body", body);
     if (campusId) fd.set("campus_id", String(campusId));
     if (startsAt) fd.set("starts_at", startsAt);
     if (endsAt) fd.set("ends_at", endsAt);
-    if (image) fd.set("image", image);
+    if (media) fd.set("media", media);
     const res = await fetch(`${API_BASE_URL}/api/announcements`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },

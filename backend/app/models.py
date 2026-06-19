@@ -332,12 +332,14 @@ class Announcement(Base):
     banners (örn. milli maç), etc. A ``campus_id`` of ``NULL`` shows the notice on
     **every** campus's kiosk; a non-null value scopes it to one campus.
 
-    An optional image is stored as bytes *in the database* — production has no
-    persistent upload volume, only the Postgres ``pgdata`` volume, so keeping the
-    image in a row lets a notice survive ``docker compose up --build``. The kiosk
-    fetches the bytes from a separate public endpoint so its frequent polling
-    stays lightweight. A notice is visible when ``active`` is true and "now" is
-    within ``[starts_at, ends_at]`` — either bound may be ``NULL`` (open-ended).
+    An optional image *or* video is stored as bytes *in the database* —
+    production has no persistent upload volume, only the Postgres ``pgdata``
+    volume, so keeping the media in a row lets a notice survive
+    ``docker compose up --build``. The kiosk fetches the bytes from a separate
+    public endpoint so its frequent polling stays lightweight. A notice is
+    visible when ``active`` is true and "now" is within ``[starts_at, ends_at]``
+    — either bound may be ``NULL`` (open-ended). A notice carries at most one of
+    image/video (the upload form has a single file field).
     """
 
     __tablename__ = "announcements"
@@ -348,6 +350,10 @@ class Announcement(Base):
     # Image bytes + its MIME type (e.g. image/jpeg). Both null for a text notice.
     image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     image_mime: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # Video bytes + its MIME type (e.g. video/mp4) — short clips only, see
+    # MAX_VIDEO_BYTES in the router. Mutually exclusive with image_data.
+    video_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    video_mime: Mapped[str | None] = mapped_column(String(80), nullable=True)
     # NULL = shown on every campus kiosk; otherwise scoped to one campus.
     campus_id: Mapped[int | None] = mapped_column(
         ForeignKey("campuses.id", ondelete="CASCADE"), index=True, nullable=True
