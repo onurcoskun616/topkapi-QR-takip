@@ -679,3 +679,30 @@ class TodaySummary(BaseModel):
     active_today: int
     currently_in_count: int
     currently_in: list[PresenceEntry]
+
+
+# --------------------------------------------------------------------------- #
+# Web Push (notifications)
+# --------------------------------------------------------------------------- #
+class PushPublicKeyResponse(BaseModel):
+    """What the PWA needs to subscribe: whether push is enabled server-side and
+    the VAPID public key (browser ``applicationServerKey``)."""
+
+    enabled: bool
+    public_key: str | None = None
+
+
+class PushKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionRequest(BaseModel):
+    """Mirrors the browser ``PushSubscription.toJSON()`` shape."""
+
+    endpoint: str
+    keys: PushKeys
+
+
+class PushSubscriptionResult(BaseModel):
+    subscribed: bool

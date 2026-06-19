@@ -55,6 +55,19 @@ class Settings(BaseSettings):
     login_failure_window_seconds: int = 900
     login_lockout_seconds: int = 900
 
+    # Web Push (VAPID). Optional: when both keys are unset the whole push
+    # feature is dormant — no subscribe endpoint payload, no sends — so the app
+    # runs exactly as before. Generate a pair with
+    # ``python -m app.tools.vapid_keys`` and put the PEM blocks (newlines as \n)
+    # plus a mailto: subject in .env.prod to switch it on.
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:topkapiokullariai@gmail.com"
+
+    @property
+    def push_enabled(self) -> bool:
+        return bool(self.vapid_public_key.strip() and self.vapid_private_key.strip())
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

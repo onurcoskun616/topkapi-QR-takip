@@ -23,6 +23,7 @@ from .routers import (
     leaves,
     logs,
     management,
+    push,
     qr,
     reports,
     scan,
@@ -77,6 +78,7 @@ app.include_router(holidays.router)
 app.include_router(reports.router)
 app.include_router(kiosk.router)
 app.include_router(announcements.router)
+app.include_router(push.router)
 
 
 @app.get("/health", tags=["system"])

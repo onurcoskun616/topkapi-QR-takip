@@ -8,7 +8,7 @@ the director corrects the record (shorten the range or cancel it) with
 ``PATCH``/``cancel`` below — scanning then works again immediately, since the
 scan-time check simply stops finding an active leave for today.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,7 @@ from datetime import date as date_
 from ..database import get_db
 from ..deps import get_current_active_staff, get_current_manager
 from ..models import Campus, LeaveRecord, LeaveStatus, User, utcnow
+from ..notifications import notify_user_background
 from ..schemas import (
     LeaveRecordCreate,
     LeaveRecordResponse,
@@ -205,6 +206,7 @@ async def update_leave(
 @router.post("/{leave_id}/approve", response_model=LeaveRecordResponse)
 async def approve_leave(
     leave_id: int,
+    background_tasks: BackgroundTasks,
     manager: User = Depends(get_current_manager),
     db: AsyncSession = Depends(get_db),
 ):
@@ -222,12 +224,20 @@ async def approve_leave(
     leave.decided_at = utcnow()
     await db.commit()
     await db.refresh(leave)
+    background_tasks.add_task(
+        notify_user_background,
+        leave.user_id,
+        "İzin talebiniz onaylandı",
+        f"{leave.leave_type} · {leave.start_date.isoformat()} – {leave.end_date.isoformat()}",
+        "/",
+    )
     return await _to_response(db, leave)
 
 
 @router.post("/{leave_id}/reject", response_model=LeaveRecordResponse)
 async def reject_leave(
     leave_id: int,
+    background_tasks: BackgroundTasks,
     manager: User = Depends(get_current_manager),
     db: AsyncSession = Depends(get_db),
 ):
@@ -244,6 +254,13 @@ async def reject_leave(
     leave.decided_at = utcnow()
     await db.commit()
     await db.refresh(leave)
+    background_tasks.add_task(
+        notify_user_background,
+        leave.user_id,
+        "İzin talebiniz reddedildi",
+        f"{leave.leave_type} · {leave.start_date.isoformat()} – {leave.end_date.isoformat()}",
+        "/",
+    )
     return await _to_response(db, leave)
 
 

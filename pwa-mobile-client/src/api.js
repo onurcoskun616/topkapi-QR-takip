@@ -87,6 +87,30 @@ export const api = {
       },
       body: JSON.stringify(payload),
     }).then(parse),
+
+  // Web Push: server config (is it on + the VAPID public key) and register /
+  // remove this device's subscription.
+  pushPublicKey: () => fetch(`${API_BASE_URL}/api/push/public-key`).then(parse),
+
+  pushSubscribe: (accessToken, subscription) =>
+    fetch(`${API_BASE_URL}/api/push/subscribe`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(subscription),
+    }).then(parse),
+
+  pushUnsubscribe: (accessToken, subscription) =>
+    fetch(`${API_BASE_URL}/api/push/unsubscribe`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(subscription),
+    }).then(parse),
 };
 
 export { API_BASE_URL };

@@ -457,3 +457,29 @@ class UsedQrToken(Base):
     used_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
+
+
+class PushSubscription(Base):
+    """A single browser/device Web Push subscription for one staff member.
+
+    A person may install the PWA on more than one device, so each ``endpoint``
+    (the push service URL the browser hands us) is its own row. ``p256dh`` and
+    ``auth`` are the browser-supplied encryption keys we need to seal a payload
+    that only that device can read. Dead endpoints (the push service answers
+    404/410) are pruned on the next send attempt.
+    """
+
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    endpoint: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    p256dh: Mapped[str] = mapped_column(String(255), nullable=False)
+    auth: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship()

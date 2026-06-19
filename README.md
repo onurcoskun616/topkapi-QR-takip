@@ -98,6 +98,16 @@ Backend için **FastAPI** seçildi: async I/O, otomatik OpenAPI dokümantasyonu
     günü bugün olan personel gün içindeki **ilk girişini** yapınca, ilgili
     kampüsün tableti yeşil onay yerine tam ekran "İyi ki doğdun!" kutlaması
     gösterir; kutlama yalnızca o kampüsün tabletlerinde çıkar.
+15. **Aylık mesai/puantaj raporu:** Her personelin seçilen aydaki toplam
+    çalışma saati (ilk giriş → son çıkış), geldiği gün, kümülatif geç dakikaları
+    ve devamsız/izinli gün sayısı tek tabloda ve Excel olarak (`puantaj`)
+    çıkarılır.
+16. **Web Push bildirimleri (isteğe bağlı):** Personel PWA'dan tek dokunuşla
+    bildirim açar; izin talebi onaylanınca/reddedilince telefonuna bildirim
+    düşer. Sunucuda VAPID anahtarları (`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`)
+    tanımlı değilse özellik tamamen kapalıdır ve uygulama aynen çalışır.
+    Anahtar üretimi: `python -m app.tools.vapid_keys`. (iOS'ta yalnızca **Ana
+    Ekrana Eklenmiş** PWA'da çalışır; Android Chrome'da tarayıcıda da çalışır.)
 
 ## Hızlı başlangıç (Docker)
 

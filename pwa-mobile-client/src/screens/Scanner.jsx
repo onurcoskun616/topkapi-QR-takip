@@ -12,13 +12,33 @@ import LeaveRequest from "./LeaveRequest";
 const READER_ID = "qr-reader";
 
 export default function Scanner() {
-  const { user, scan, myStatus } = useAuth();
+  const { user, scan, myStatus, notificationStatus, enableNotifications, disableNotifications } =
+    useAuth();
   const [mode, setMode] = useState("scan"); // scan | leave
   const [phase, setPhase] = useState("scanning"); // scanning | processing | result
   const [result, setResult] = useState(null); // { kind, message }
   const [cameraError, setCameraError] = useState(null);
   const [checkout, setCheckout] = useState(null); // {should_check_out, minutes_overdue}
   const [geoPerm, setGeoPerm] = useState(getPermission());
+
+  // Web Push toggle state: "unsupported" | "disabled" | "denied" | "off" |
+  // "on" | "busy". Only shown when the device supports it and the server has
+  // push enabled (i.e. not "unsupported"/"disabled").
+  const [pushState, setPushState] = useState(null);
+  useEffect(() => {
+    notificationStatus().then(setPushState).catch(() => setPushState("unsupported"));
+  }, [notificationStatus]);
+
+  const toggleNotifications = async () => {
+    const prev = pushState;
+    setPushState("busy");
+    try {
+      setPushState(prev === "on" ? await disableNotifications() : await enableNotifications());
+    } catch (err) {
+      setPushState(prev);
+      alert(err.message || "Bildirim ayarı değiştirilemedi.");
+    }
+  };
 
   // Start watching the device location as soon as the scan screen opens, so the
   // browser asks for permission up front and a fresh fix is ready at scan time
@@ -148,6 +168,26 @@ export default function Scanner() {
         <div className="scanner__header-actions">
           {/* No "Çıkış": one phone is permanently bound to one employee. Switching
               devices is only possible after a manager's "Cihazı Sıfırla". */}
+          {pushState && pushState !== "unsupported" && pushState !== "disabled" && (
+            <button
+              className="link"
+              onClick={toggleNotifications}
+              disabled={pushState === "busy" || pushState === "denied"}
+              title={
+                pushState === "denied"
+                  ? "Bildirim izni reddedilmiş — tarayıcı ayarlarından açın"
+                  : undefined
+              }
+            >
+              {pushState === "on"
+                ? "🔔 Bildirimler açık"
+                : pushState === "busy"
+                  ? "…"
+                  : pushState === "denied"
+                    ? "🔕 Bildirim engelli"
+                    : "🔔 Bildirimleri Aç"}
+            </button>
+          )}
           <button className="link" onClick={openLeave}>
             İzin Talebi
           </button>

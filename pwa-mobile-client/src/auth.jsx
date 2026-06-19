@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { getDeviceFingerprint } from "./fingerprint";
+import { enablePush, disablePush, pushStatus } from "./push";
 
 // The long-lived (1 year) refresh token lives in localStorage.
 const REFRESH_KEY = "topkapi_refresh_token";
@@ -125,9 +126,28 @@ export function AuthProvider({ children }) {
   const requestLeave = (payload) => withAuth((t) => api.requestLeave(t, payload));
   const myStatus = () => withAuth((t) => api.myStatus(t));
 
+  // Web Push: status needs no auth (just reads server config + the browser's
+  // own subscription); enabling/disabling registers this device server-side.
+  const notificationStatus = () => pushStatus();
+  const enableNotifications = () => withAuth((t) => enablePush(t));
+  const disableNotifications = () => withAuth((t) => disablePush(t));
+
   return (
     <AuthContext.Provider
-      value={{ user, phase, register, recheck, logout, scan, myLeaves, requestLeave, myStatus }}
+      value={{
+        user,
+        phase,
+        register,
+        recheck,
+        logout,
+        scan,
+        myLeaves,
+        requestLeave,
+        myStatus,
+        notificationStatus,
+        enableNotifications,
+        disableNotifications,
+      }}
     >
       {children}
     </AuthContext.Provider>

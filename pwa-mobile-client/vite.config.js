@@ -39,6 +39,9 @@ export default defineConfig({
         // cached (attendance must always hit the live server).
         navigateFallbackDenylist: [/^\/api/],
         globPatterns: ["**/*.{js,css,html,png,svg,ico}"],
+        // Pull our push/notificationclick handlers into the generated SW
+        // without switching away from the default precaching strategy.
+        importScripts: ["/push-sw.js"],
       },
     }),
   ],
