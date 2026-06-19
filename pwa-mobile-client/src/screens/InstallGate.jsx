@@ -47,7 +47,14 @@ export default function InstallGate({ children }) {
 
   return (
     <div className="screen center install">
-      <h1 className="install__title">Topkapı Yoklama</h1>
+      <div className="install__brand">
+        <img
+          src="/topkapi-logo.png"
+          alt="Topkapı Okulları"
+          className="install__brandimg"
+        />
+      </div>
+      <p className="install__appname">Personel Yoklama Uygulaması</p>
 
       {wasInstalled() ? (
         <div className="install__done">
