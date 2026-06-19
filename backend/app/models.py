@@ -232,6 +232,12 @@ class AttendanceLog(Base):
     recorded_by_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # Which physical tablet's QR code was scanned (copied from the QR token's
+    # ``kiosk`` claim). NULL for manual entries and for scans made against an
+    # older kiosk build that didn't yet send an id. A campus can run several
+    # kiosks at once; this lets the confirmation feed show a scan only on the
+    # tablet it actually happened on, instead of on every tablet at the campus.
+    kiosk_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="logs", foreign_keys="AttendanceLog.user_id")
     recorded_by: Mapped["User | None"] = relationship(foreign_keys="AttendanceLog.recorded_by_id")

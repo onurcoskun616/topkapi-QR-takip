@@ -19,6 +19,25 @@ function readCampusId() {
   return fromQuery || import.meta.env.VITE_CAMPUS_ID || null;
 }
 
+const KIOSK_ID_KEY = "topkapi_kiosk_id";
+
+// A campus can run several tablets at once. Each needs its own stable id so a
+// scan confirmed on one tablet's QR code is never shown on another — generated
+// once and kept in localStorage, so it survives reloads but is unique per
+// physical device (clearing site data starts a fresh identity, which is fine:
+// it only affects which tablet shows the next confirmation, never attendance).
+function readKioskId() {
+  let id = localStorage.getItem(KIOSK_ID_KEY);
+  if (!id) {
+    id =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(KIOSK_ID_KEY, id);
+  }
+  return id;
+}
+
 // How long each on-screen confirmation stays up, and how often we poll for new
 // scans. The poll is brisk so a green check appears within a fraction of a
 // second of scanning. The phone always shows its own instant result too.
@@ -66,6 +85,7 @@ export default function App() {
 
   // Scan confirmations / birthday celebrations polled for this kiosk's campus.
   const campusIdRef = useRef(readCampusId());
+  const kioskIdRef = useRef(readKioskId());
   const [current, setCurrent] = useState(null); // { kind, name, type } | null
   const currentRef = useRef(null);
   const queueRef = useRef([]);
@@ -86,7 +106,7 @@ export default function App() {
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const data = await fetchQrToken(campusIdRef.current, controller.signal);
+      const data = await fetchQrToken(campusIdRef.current, kioskIdRef.current, controller.signal);
       const serverNow = new Date(data.server_time).getTime();
       serverOffsetRef.current = serverNow - Date.now();
       setToken(data.token);
@@ -198,7 +218,7 @@ export default function App() {
 
     const poll = async () => {
       try {
-        const data = await fetchRecentScans(campusId, controller.signal);
+        const data = await fetchRecentScans(campusId, kioskIdRef.current, controller.signal);
         if (cancelled) return;
         for (const s of data.scans || []) {
           if (seenLogIdsRef.current.has(s.log_id)) continue;

@@ -993,6 +993,28 @@ def test_recent_scans_scoped_to_campus(client, seeded):
     assert _recent_scans(client, seeded["campus_b"]["id"]) == []
 
 
+def test_recent_scans_scoped_to_kiosk_when_campus_has_several_tablets(client, seeded):
+    """Two tablets at the same campus must not see each other's confirmations —
+    only the tablet whose own QR code was actually scanned shows it."""
+    campus_id = seeded["campus_a"]["id"]
+    token = client.get(
+        "/api/qr/token", params={"campus_id": campus_id, "kiosk_id": "tablet-1"}
+    ).json()["token"]
+    r = client.post("/api/scan", headers=seeded["staff_headers"], json={"qr_token": token})
+    assert r.status_code == 200
+
+    own = client.get(
+        "/api/kiosk/recent-scans", params={"campus_id": campus_id, "kiosk_id": "tablet-1"}
+    ).json()["scans"]
+    assert len(own) == 1
+    assert own[0]["full_name"] == "Ayşe Yılmaz"
+
+    other = client.get(
+        "/api/kiosk/recent-scans", params={"campus_id": campus_id, "kiosk_id": "tablet-2"}
+    ).json()["scans"]
+    assert other == []
+
+
 # --------------------------------------------------------------------------- #
 # One-time staff reset script (app.scripts.reset_staff)
 # --------------------------------------------------------------------------- #

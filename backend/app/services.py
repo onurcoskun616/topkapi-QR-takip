@@ -193,7 +193,7 @@ def next_attendance_type(last_log: AttendanceLog | None) -> AttendanceType:
 
 
 async def record_scan(
-    db: AsyncSession, user_id: int, now_utc: datetime
+    db: AsyncSession, user_id: int, now_utc: datetime, kiosk_id: str | None = None
 ) -> AttendanceLog:
     """Create the next toggled attendance log for the user. Caller commits."""
     last_log = await get_last_log_today(db, user_id, now_utc)
@@ -202,6 +202,7 @@ async def record_scan(
         scan_time=now_utc,
         type=next_attendance_type(last_log),
         status=AttendanceStatus.valid,
+        kiosk_id=kiosk_id,
     )
     db.add(log)
     return log

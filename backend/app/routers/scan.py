@@ -140,7 +140,7 @@ async def scan(
 
     # --- 3. Toggle IN/OUT based on today's last record -----------------------
     now_utc = datetime.now(timezone.utc)
-    log = await record_scan(db, current.id, now_utc)
+    log = await record_scan(db, current.id, now_utc, kiosk_id=qr.get("kiosk"))
     await db.commit()
     await db.refresh(log)
 

@@ -93,7 +93,9 @@ Backend için **FastAPI** seçildi: async I/O, otomatik OpenAPI dokümantasyonu
 13. **Tablette tarama onayı:** Her başarılı QR taramasından hemen sonra
     tablette yeşil tikli "Giriş başarılı" / "Çıkış başarılı" + isim bildirimi
     çıkar (kiosk, kampüsünün son taramalarını yoklar; tablet kampüsünü
-    `?campus=<id>` ile bilir).
+    `?campus=<id>` ile bilir). Bir kampüste birden fazla tablet varsa her biri
+    kendi kalıcı kimliğini üretir; onay yalnızca taramanın gerçekleştiği
+    tablette gösterilir, diğer tabletlerde görünmez.
 14. **Doğum günü kutlaması:** Personel kayıtta **doğum tarihini** girer. Doğum
     günü bugün olan personel gün içindeki **ilk girişini** yapınca, ilgili
     kampüsün tableti yeşil onay yerine tam ekran "İyi ki doğdun!" kutlaması
