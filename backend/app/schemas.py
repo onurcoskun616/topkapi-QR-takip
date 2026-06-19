@@ -497,6 +497,36 @@ class DailyTrendResponse(BaseModel):
     total_unresolved: int
 
 
+class RiskStaffEntry(BaseModel):
+    """One flagged staff member in the early-warning panel: their late /
+    early-leave / unresolved-absence counts for the range, a numeric risk
+    score, a level, and human-readable reasons (flags)."""
+
+    user_id: int
+    full_name: str
+    job_title: str | None = None   # görev
+    branch: str | None = None      # branş
+    campus_name: str | None = None
+    late_days: int
+    early_leave_days: int
+    unresolved_days: int
+    score: int
+    level: str             # "medium" | "high"
+    flags: list[str]
+
+
+class RiskReportResponse(BaseModel):
+    start_date: date
+    end_date: date
+    high_count: int
+    medium_count: int
+    entries: list[RiskStaffEntry]
+    # Echo the thresholds in effect so the panel can explain what it flagged.
+    late_threshold: int
+    early_leave_threshold: int
+    unresolved_threshold: int
+
+
 class ForgotCheckoutEntry(BaseModel):
     """A staff member still 'inside' (last log today is IN) whose campus shift
     has already ended — they likely forgot to scan out and will otherwise be

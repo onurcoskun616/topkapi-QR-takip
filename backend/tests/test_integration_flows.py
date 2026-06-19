@@ -468,6 +468,84 @@ def test_absence_summary_counts_unresolved(client, seeded):
 
 
 # --------------------------------------------------------------------------- #
+# Risk / early-warning panel (threshold layer over the reports)
+# --------------------------------------------------------------------------- #
+def test_risk_flags_repeated_late_arrivals(client, seeded):
+    # Four weekdays in the past, each a 30-min-late IN (and a scan, so the day
+    # counts as present — no unresolved absence in this tight range).
+    for d in ("2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04"):
+        r = client.post(
+            "/api/logs/manual",
+            headers=seeded["dir_a_headers"],
+            json={"user_id": seeded["staff_id"], "type": "IN", "date": d, "time": "08:30:00"},
+        )
+        assert r.status_code == 201
+
+    params = {
+        "start_date": "2026-06-01",
+        "end_date": "2026-06-04",
+        "threshold_minutes": 0,
+        "late_threshold": 3,
+        "early_leave_threshold": 3,
+        "unresolved_threshold": 2,
+    }
+    r = client.get("/api/reports/risk", headers=seeded["dir_a_headers"], params=params)
+    assert r.status_code == 200
+    body = r.json()
+    mine = [e for e in body["entries"] if e["user_id"] == seeded["staff_id"]]
+    assert len(mine) == 1
+    assert mine[0]["late_days"] == 4
+    assert mine[0]["unresolved_days"] == 0
+    assert mine[0]["level"] in ("medium", "high")
+    assert any("geç" in f.lower() for f in mine[0]["flags"])
+
+    # Raising the bar above the actual count clears the flag.
+    r = client.get(
+        "/api/reports/risk",
+        headers=seeded["dir_a_headers"],
+        params={**params, "late_threshold": 10},
+    )
+    assert all(e["user_id"] != seeded["staff_id"] for e in r.json()["entries"])
+
+
+def test_risk_flags_unresolved_absences_as_high(client, seeded):
+    # No scans across this past range → unresolved absences pile up → high risk.
+    params = {
+        "start_date": "2026-06-01",
+        "end_date": "2026-06-10",
+        "exclude_weekends": "false",
+        "late_threshold": 50,
+        "early_leave_threshold": 50,
+        "unresolved_threshold": 2,
+    }
+    r = client.get("/api/reports/risk", headers=seeded["dir_a_headers"], params=params)
+    assert r.status_code == 200
+    body = r.json()
+    mine = [e for e in body["entries"] if e["user_id"] == seeded["staff_id"]]
+    assert len(mine) == 1
+    assert mine[0]["unresolved_days"] >= 2
+    assert mine[0]["level"] == "high"
+    assert body["high_count"] >= 1
+
+
+def test_risk_scoped_to_director_campus(client, seeded):
+    # Campus B's director sees none of campus A's staff in the risk panel.
+    for d in ("2026-06-01", "2026-06-02", "2026-06-03"):
+        client.post(
+            "/api/logs/manual",
+            headers=seeded["dir_a_headers"],
+            json={"user_id": seeded["staff_id"], "type": "IN", "date": d, "time": "08:40:00"},
+        )
+    r = client.get(
+        "/api/reports/risk",
+        headers=seeded["dir_b_headers"],
+        params={"start_date": "2026-06-01", "end_date": "2026-06-03", "late_threshold": 1},
+    )
+    assert r.status_code == 200
+    assert all(e["user_id"] != seeded["staff_id"] for e in r.json()["entries"])
+
+
+# --------------------------------------------------------------------------- #
 # Reports narrowed to a single person via user_id (per-person reporting)
 # --------------------------------------------------------------------------- #
 def _bulk_import_one(client, seeded, full_name, phone):

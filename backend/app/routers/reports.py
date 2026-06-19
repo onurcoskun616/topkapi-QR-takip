@@ -45,6 +45,8 @@ from ..schemas import (
     ForgotCheckoutResponse,
     LateArrivalEntry,
     LateRankingEntry,
+    RiskReportResponse,
+    RiskStaffEntry,
     UnresolvedReminderResponse,
 )
 from ..scoping import scope_campus_id
@@ -556,6 +558,110 @@ async def absence_summary(
         by_reason=by_reason,
         totals_by_staff=totals,
         unresolved_count=unresolved_count,
+    )
+
+
+@router.get("/risk", response_model=RiskReportResponse)
+async def risk_report(
+    start_date: date,
+    end_date: date,
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+    campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    user_id: int | None = None,
+    threshold_minutes: int = Query(0, ge=0, le=240, description="Grace before late/early counts"),
+    exclude_weekends: bool = True,
+    late_threshold: int = Query(3, ge=1, le=100, description="Flag at this many late days"),
+    early_leave_threshold: int = Query(3, ge=1, le=100, description="Flag at this many early-leave days"),
+    unresolved_threshold: int = Query(2, ge=1, le=100, description="Flag at this many unresolved-absence days"),
+):
+    """Early-warning panel: surfaces staff whose late arrivals, early leaves, or
+    unresolved (durum girilmemiş) absences in the range cross the configured
+    thresholds. Pure threshold layer over the existing late/early-leave/absence
+    computations — no new data source, so it always agrees with the detail
+    reports."""
+    late = await late_ranking(
+        start_date, end_date, manager, db, campus_id, user_id, threshold_minutes, exclude_weekends, 700
+    )
+    early = await early_leave_ranking(
+        start_date, end_date, manager, db, campus_id, user_id, threshold_minutes, exclude_weekends, 700
+    )
+    absences = await _compute_absences(db, manager, start_date, end_date, campus_id, user_id, exclude_weekends)
+
+    # Aggregate per staff, carrying display fields from whichever source has them.
+    agg: dict[int, dict] = {}
+
+    def _slot(uid, full_name, job_title, branch, campus_name) -> dict:
+        s = agg.get(uid)
+        if s is None:
+            s = {
+                "user_id": uid,
+                "full_name": full_name,
+                "job_title": job_title,
+                "branch": branch,
+                "campus_name": campus_name,
+                "late_days": 0,
+                "early_leave_days": 0,
+                "unresolved_days": 0,
+            }
+            agg[uid] = s
+        return s
+
+    for r in late:
+        _slot(r.user_id, r.full_name, r.job_title, r.branch, r.campus_name)["late_days"] = r.late_days
+    for r in early:
+        _slot(r.user_id, r.full_name, r.job_title, r.branch, r.campus_name)["early_leave_days"] = r.early_leave_days
+    for e in absences:
+        if e.status == "unresolved":
+            _slot(e.user_id, e.full_name, e.job_title, e.branch, e.campus_name)["unresolved_days"] += 1
+
+    entries: list[RiskStaffEntry] = []
+    for s in agg.values():
+        flags: list[str] = []
+        if s["late_days"] >= late_threshold:
+            flags.append(f"Bu dönem {s['late_days']} kez geç geldi")
+        if s["early_leave_days"] >= early_leave_threshold:
+            flags.append(f"Bu dönem {s['early_leave_days']} kez erken çıktı")
+        if s["unresolved_days"] >= unresolved_threshold:
+            flags.append(f"{s['unresolved_days']} gün durumu girilmemiş devamsızlık")
+        if not flags:
+            continue  # early-warning list: only flagged staff appear
+
+        score = s["unresolved_days"] * 3 + s["late_days"] + s["early_leave_days"]
+        # "high" when the problem is serious: any unresolved absence over the
+        # bar, a doubled late/early pattern, or more than one kind of flag.
+        is_high = (
+            s["unresolved_days"] >= unresolved_threshold
+            or s["late_days"] >= 2 * late_threshold
+            or s["early_leave_days"] >= 2 * early_leave_threshold
+            or len(flags) >= 2
+        )
+        entries.append(
+            RiskStaffEntry(
+                user_id=s["user_id"],
+                full_name=s["full_name"],
+                job_title=s["job_title"],
+                branch=s["branch"],
+                campus_name=s["campus_name"],
+                late_days=s["late_days"],
+                early_leave_days=s["early_leave_days"],
+                unresolved_days=s["unresolved_days"],
+                score=score,
+                level="high" if is_high else "medium",
+                flags=flags,
+            )
+        )
+
+    entries.sort(key=lambda e: (0 if e.level == "high" else 1, -e.score, e.full_name))
+    return RiskReportResponse(
+        start_date=start_date,
+        end_date=end_date,
+        high_count=sum(1 for e in entries if e.level == "high"),
+        medium_count=sum(1 for e in entries if e.level == "medium"),
+        entries=entries,
+        late_threshold=late_threshold,
+        early_leave_threshold=early_leave_threshold,
+        unresolved_threshold=unresolved_threshold,
     )
 
 

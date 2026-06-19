@@ -87,6 +87,107 @@ function ReasonBars({ byReason }) {
   );
 }
 
+// Early-warning panel: staff who crossed the configured late / early-leave /
+// unresolved-absence thresholds in the selected range, with a Yüksek/Orta tag.
+function RiskPanel({ risk, isHq, thresholds, onThreshold }) {
+  return (
+    <section className="card">
+      <div className="filters">
+        <h2 className="card__title" style={{ margin: 0 }}>
+          Risk / Erken Uyarı
+        </h2>
+        {risk && (
+          <span className="muted small" style={{ marginLeft: 8 }}>
+            {risk.high_count} yüksek · {risk.medium_count} orta
+          </span>
+        )}
+        <div className="grow" />
+        <label className="field field--inline">
+          <span>Geç ≥</span>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            style={{ width: 64 }}
+            value={thresholds.late}
+            onChange={(e) => onThreshold("late", Number(e.target.value))}
+          />
+        </label>
+        <label className="field field--inline">
+          <span>Erken ≥</span>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            style={{ width: 64 }}
+            value={thresholds.early}
+            onChange={(e) => onThreshold("early", Number(e.target.value))}
+          />
+        </label>
+        <label className="field field--inline">
+          <span>Devamsız ≥</span>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            style={{ width: 64 }}
+            value={thresholds.unresolved}
+            onChange={(e) => onThreshold("unresolved", Number(e.target.value))}
+          />
+        </label>
+      </div>
+      <p className="muted small">
+        Seçili dönemde eşiği aşan personel işaretlenir: çok geç kalma, çok erken
+        çıkış veya durumu girilmemiş devamsızlık.
+      </p>
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Risk</th>
+              <th>Personel</th>
+              <th>Görev / Branş</th>
+              {isHq && <th>Kampüs</th>}
+              <th>Geç</th>
+              <th>Erken</th>
+              <th>Durum Girilmemiş</th>
+              <th>Uyarılar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!risk || risk.entries.length === 0 ? (
+              <tr>
+                <td colSpan={isHq ? 8 : 7} className="muted">
+                  Eşiği aşan personel yok. 👍
+                </td>
+              </tr>
+            ) : (
+              risk.entries.map((r) => (
+                <tr key={r.user_id}>
+                  <td>
+                    <span
+                      className={`badge ${r.level === "high" ? "badge--out" : "badge--auto"}`}
+                    >
+                      {r.level === "high" ? "Yüksek" : "Orta"}
+                    </span>
+                  </td>
+                  <td>{r.full_name}</td>
+                  <td className="muted small">{roleLabel(r)}</td>
+                  {isHq && <td className="muted small">{r.campus_name || "—"}</td>}
+                  <td>{r.late_days}</td>
+                  <td>{r.early_leave_days}</td>
+                  <td>{r.unresolved_days || 0}</td>
+                  <td className="muted small">{r.flags.join(" · ")}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export default function Reports({ isHq }) {
   const { token } = useAuth();
   const [campuses, setCampuses] = useState([]);
@@ -105,6 +206,11 @@ export default function Reports({ isHq }) {
   const [detail, setDetail] = useState([]);
   const [trend, setTrend] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
+
+  const [risk, setRisk] = useState(null);
+  const [lateThreshold, setLateThreshold] = useState(3);
+  const [earlyLeaveThreshold, setEarlyLeaveThreshold] = useState(3);
+  const [unresolvedThreshold, setUnresolvedThreshold] = useState(2);
 
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -141,7 +247,7 @@ export default function Reports({ isHq }) {
     setBusy(true);
     setError(null);
     try {
-      const [lateRows, earlyRows, lateListRows, earlyListRows, summaryRes, detailRows, trendRes] =
+      const [lateRows, earlyRows, lateListRows, earlyListRows, summaryRes, detailRows, trendRes, riskRes] =
         await Promise.all([
           api.lateRanking(token, filters),
           api.earlyLeaveRanking(token, filters),
@@ -150,6 +256,12 @@ export default function Reports({ isHq }) {
           api.absenceSummary(token, filters),
           api.absenceDetail(token, filters),
           api.dailyTrend(token, filters),
+          api.riskReport(token, {
+            ...filters,
+            lateThreshold,
+            earlyLeaveThreshold,
+            unresolvedThreshold,
+          }),
         ]);
       setLate(lateRows);
       setEarly(earlyRows);
@@ -158,6 +270,7 @@ export default function Reports({ isHq }) {
       setSummary(summaryRes);
       setDetail(detailRows);
       setTrend(trendRes);
+      setRisk(riskRes);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -168,7 +281,18 @@ export default function Reports({ isHq }) {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, range.start, range.end, campusId, userId, thresholdMinutes, excludeWeekends]);
+  }, [
+    token,
+    range.start,
+    range.end,
+    campusId,
+    userId,
+    thresholdMinutes,
+    excludeWeekends,
+    lateThreshold,
+    earlyLeaveThreshold,
+    unresolvedThreshold,
+  ]);
 
   const onLogsXlsx = async () => {
     try {
@@ -301,6 +425,21 @@ export default function Reports({ isHq }) {
           <div className="kpi__label">Erken çıkan personel sayısı</div>
         </div>
       </section>
+
+      <RiskPanel
+        risk={risk}
+        isHq={isHq}
+        thresholds={{
+          late: lateThreshold,
+          early: earlyLeaveThreshold,
+          unresolved: unresolvedThreshold,
+        }}
+        onThreshold={(which, value) => {
+          if (which === "late") setLateThreshold(value);
+          else if (which === "early") setEarlyLeaveThreshold(value);
+          else setUnresolvedThreshold(value);
+        }}
+      />
 
       <section className="card">
         <h2 className="card__title">Günlük Devam Eğilimi</h2>

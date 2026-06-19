@@ -279,6 +279,36 @@ export const api = {
       })}`,
       { token }
     ),
+
+  // --- risk / early-warning panel (threshold layer over the reports) ------
+  riskReport: (
+    token,
+    {
+      startDate,
+      endDate,
+      campusId,
+      userId,
+      excludeWeekends,
+      thresholdMinutes,
+      lateThreshold,
+      earlyLeaveThreshold,
+      unresolvedThreshold,
+    } = {}
+  ) =>
+    request(
+      `/api/reports/risk${qs({
+        start_date: startDate,
+        end_date: endDate,
+        campus_id: campusId,
+        user_id: userId,
+        exclude_weekends: excludeWeekends,
+        threshold_minutes: thresholdMinutes,
+        late_threshold: lateThreshold,
+        early_leave_threshold: earlyLeaveThreshold,
+        unresolved_threshold: unresolvedThreshold,
+      })}`,
+      { token }
+    ),
 };
 
 async function downloadFile(token, path, params, filename, failMessage) {
