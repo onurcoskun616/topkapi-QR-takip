@@ -21,9 +21,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import or_
+
 from ..config import settings
 from ..database import get_db
 from ..models import (
+    Announcement,
     AttendanceLog,
     AttendanceSource,
     AttendanceStatus,
@@ -33,8 +36,14 @@ from ..models import (
     UserStatus,
     ensure_aware,
 )
-from ..schemas import RecentScan, RecentScansResponse
+from ..schemas import (
+    KioskAnnouncement,
+    KioskAnnouncementsResponse,
+    RecentScan,
+    RecentScansResponse,
+)
 from ..services import day_bounds_utc
+from .announcements import image_path, is_visible
 
 router = APIRouter(prefix="/api/kiosk", tags=["kiosk"])
 
@@ -118,3 +127,39 @@ async def recent_scans(
 
     scans.sort(key=lambda s: s.scan_time)
     return RecentScansResponse(scans=scans)
+
+
+@router.get("/announcements", response_model=KioskAnnouncementsResponse)
+async def kiosk_announcements(
+    campus_id: int = Query(..., description="The kiosk's campus (from the tablet URL ?campus=)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Public feed of the notices this campus's kiosk should display right now.
+
+    Returns the campus's own notices plus the all-campus ones, filtered to those
+    currently active and within their schedule window. Oldest first so a steady
+    rotation order stays stable as new notices are added.
+    """
+    now_utc = datetime.now(timezone.utc)
+    rows = await db.execute(
+        select(Announcement)
+        .where(
+            or_(
+                Announcement.campus_id == campus_id,
+                Announcement.campus_id.is_(None),
+            )
+        )
+        .order_by(Announcement.created_at.asc())
+    )
+    visible = [a for a in rows.scalars().all() if is_visible(a, now_utc)]
+    return KioskAnnouncementsResponse(
+        announcements=[
+            KioskAnnouncement(
+                id=a.id,
+                title=a.title,
+                body=a.body,
+                image_url=image_path(a.id) if a.image_data is not None else None,
+            )
+            for a in visible
+        ]
+    )

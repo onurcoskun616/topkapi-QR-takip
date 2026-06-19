@@ -318,3 +318,102 @@ body {
   font-size: clamp(1.3rem, 3.6vw, 2.2rem);
   color: var(--text);
 }
+
+/* ---- Announcement mode (full-screen notice + corner QR) ---- */
+.kiosk--announce {
+  padding: 0;
+  gap: 0;
+  display: block;
+  position: relative;
+}
+
+.announce {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Image notices: the photo is the hero, letter-boxed so it's never cropped. */
+.announce--image {
+  background: #0b1f3a;
+}
+.announce__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.announce__caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 6vh 6vw 5vh;
+  text-align: center;
+  background: linear-gradient(
+    to top,
+    rgba(11, 31, 58, 0.92),
+    rgba(11, 31, 58, 0.55) 60%,
+    rgba(11, 31, 58, 0)
+  );
+}
+
+/* Text-only notices: large, centered on the brand background. */
+.announce--text {
+  padding: 6vh 8vw;
+  text-align: center;
+}
+
+.announce__title {
+  font-size: clamp(1.6rem, 4vw, 3rem);
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+}
+.announce__title--big {
+  font-size: clamp(2.4rem, 8vw, 6rem);
+  color: var(--accent);
+}
+.announce__body {
+  margin-top: 1.5vh;
+  font-size: clamp(1.1rem, 2.6vw, 2rem);
+  color: #eaf1fb;
+  line-height: 1.4;
+  max-width: 90vw;
+}
+.announce__body--big {
+  margin-top: 3vh;
+  font-size: clamp(1.4rem, 4vw, 3rem);
+}
+
+/* Compact QR pinned to the bottom-right corner during announcement mode. */
+.qr-corner {
+  position: absolute;
+  right: clamp(16px, 2.5vw, 40px);
+  bottom: clamp(16px, 2.5vw, 40px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  padding: clamp(10px, 1.4vw, 18px);
+  border-radius: 18px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
+}
+.qr-corner__code {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.qr-corner__label {
+  font-size: clamp(0.7rem, 1.1vw, 0.95rem);
+  font-weight: 700;
+  color: #0b1f3a;
+}
+.qr-corner--stale .qr-corner__code {
+  opacity: 0.35;
+  filter: grayscale(1);
+}

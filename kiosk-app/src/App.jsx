@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { fetchQrToken, fetchQrTokenStatus, fetchRecentScans } from "./api";
+import {
+  fetchQrToken,
+  fetchQrTokenStatus,
+  fetchRecentScans,
+  fetchAnnouncements,
+} from "./api";
 import BirthdayOverlay from "./BirthdayOverlay";
 import ScanResult from "./ScanResult";
+import Announcement from "./Announcement";
 import logo from "./assets/logo.png";
 
 // The kiosk learns which campus it belongs to from the tablet URL, e.g.
@@ -28,6 +34,10 @@ const MAX_PENDING = 4;
 // at one campus, where the next person may well be standing at this exact
 // tablet moments after someone else's scan.
 const TOKEN_STATUS_POLL_MS = 800;
+// How often we refresh the list of notices to show, and — when more than one is
+// active — how long each stays on screen before rotating to the next.
+const ANNOUNCE_POLL_MS = 20000;
+const ANNOUNCE_ROTATE_MS = 12000;
 
 /**
  * Full-screen kiosk:
@@ -56,6 +66,10 @@ export default function App() {
   const currentRef = useRef(null);
   const queueRef = useRef([]);
   const seenLogIdsRef = useRef(new Set());
+
+  // Full-screen notices (admin "Duyurular"); rotated if more than one is active.
+  const [announcements, setAnnouncements] = useState([]);
+  const [annIndex, setAnnIndex] = useState(0);
 
   const refresh = useCallback(async () => {
     abortRef.current?.abort();
@@ -220,6 +234,44 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [current, dismiss]);
 
+  // Poll the notices this campus's kiosk should display right now.
+  useEffect(() => {
+    const campusId = campusIdRef.current;
+    if (!campusId) return; // no campus configured → no notices
+
+    let cancelled = false;
+    const controller = new AbortController();
+    const poll = async () => {
+      try {
+        const data = await fetchAnnouncements(campusId, controller.signal);
+        if (!cancelled) setAnnouncements(data.announcements || []);
+      } catch {
+        /* transient; next tick retries */
+      }
+    };
+    poll();
+    const interval = setInterval(poll, ANNOUNCE_POLL_MS);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Rotate through multiple active notices; reset to the first when the set
+  // shrinks so the index never points past the end.
+  useEffect(() => {
+    if (announcements.length <= 1) {
+      setAnnIndex(0);
+      return;
+    }
+    const interval = setInterval(
+      () => setAnnIndex((i) => (i + 1) % announcements.length),
+      ANNOUNCE_ROTATE_MS
+    );
+    return () => clearInterval(interval);
+  }, [announcements.length]);
+
   const progress = Math.min(100, Math.max(0, (remaining / ttl) * 100));
   const isStale = remaining <= 0 || !token;
 
@@ -233,14 +285,51 @@ export default function App() {
     ? Math.min(window.innerWidth * 0.22, window.innerHeight * 0.55)
     : Math.min(window.innerWidth * 0.46, window.innerHeight * 0.36);
 
-  return (
-    <div className="kiosk">
+  // The notice currently on screen (rotated by the effect above), if any.
+  const announcement = announcements.length
+    ? announcements[annIndex % announcements.length]
+    : null;
+
+  // Scan confirmations / birthday celebrations overlay every layout.
+  const overlays = (
+    <>
       {current?.kind === "birthday" && (
         <BirthdayOverlay name={current.name} onDone={dismiss} />
       )}
       {current?.kind === "scan" && (
         <ScanResult name={current.name} type={current.type} onDone={dismiss} />
       )}
+    </>
+  );
+
+  // Announcement mode: the notice fills the screen and the QR shrinks to a
+  // compact card in the bottom-right corner — no clock, no countdown clutter.
+  if (announcement) {
+    const cornerQr = Math.max(
+      120,
+      Math.min(220, Math.min(window.innerWidth, window.innerHeight) * 0.2)
+    );
+    return (
+      <div className="kiosk kiosk--announce">
+        {overlays}
+        <Announcement data={announcement} />
+        <div className={`qr-corner ${isStale ? "qr-corner--stale" : ""}`}>
+          <div className="qr-corner__code">
+            {token ? (
+              <QRCodeSVG value={token} size={cornerQr} level="M" includeMargin={false} />
+            ) : (
+              <div style={{ width: cornerQr, height: cornerQr }} />
+            )}
+          </div>
+          <span className="qr-corner__label">Giriş / Çıkış için okutun</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="kiosk">
+      {overlays}
       <div className="kiosk__intro">
         <img className="kiosk__logo" src={logo} alt="Topkapı Okulları" />
         <h1 className="kiosk__title">Topkapı Okulları</h1>

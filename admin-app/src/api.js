@@ -1,6 +1,10 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:8000";
 
+// Exported so components can build absolute URLs for binary endpoints (e.g. an
+// announcement's image) that aren't fetched through `request()`.
+export const apiBaseUrl = API_BASE_URL;
+
 async function request(path, { method = "GET", body, token } = {}) {
   const headers = {};
   if (body) headers["Content-Type"] = "application/json";
@@ -168,6 +172,46 @@ export const api = {
 
   deleteHoliday: (token, id) =>
     request(`/api/holidays/${id}`, { method: "DELETE", token }),
+
+  // --- announcements (full-screen kiosk notices) -------------------------
+  listAnnouncements: (token, { campusId } = {}) =>
+    request(`/api/announcements${qs({ campus_id: campusId })}`, { token }),
+
+  // Create with optional image → multipart/form-data (let the browser set the
+  // boundary; do NOT set Content-Type manually).
+  createAnnouncement: async (token, { title, body, campusId, startsAt, endsAt, image }) => {
+    const fd = new FormData();
+    if (title) fd.set("title", title);
+    if (body) fd.set("body", body);
+    if (campusId) fd.set("campus_id", String(campusId));
+    if (startsAt) fd.set("starts_at", startsAt);
+    if (endsAt) fd.set("ends_at", endsAt);
+    if (image) fd.set("image", image);
+    const res = await fetch(`${API_BASE_URL}/api/announcements`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+    });
+    const text = await res.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+    if (!res.ok) {
+      const err = new Error((data && data.detail) || `İstek başarısız (${res.status})`);
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  },
+
+  setAnnouncementActive: (token, id, active) =>
+    request(`/api/announcements/${id}`, { method: "PATCH", token, body: { active } }),
+
+  deleteAnnouncement: (token, id) =>
+    request(`/api/announcements/${id}`, { method: "DELETE", token }),
 
   // --- forgot-to-check-out reminder (still inside after shift end) --------
   forgotCheckout: (token, { campusId, thresholdMinutes } = {}) =>

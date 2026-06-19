@@ -48,3 +48,27 @@ export async function fetchRecentScans(campusId, signal) {
   }
   return res.json(); // { scans: [{ log_id, user_id, full_name, type, scan_time, birthday }] }
 }
+
+/**
+ * Poll the notices this kiosk's campus should display right now (full-screen
+ * announcements / images created from the admin panel). Image paths are made
+ * absolute against the API base so <img> can load them directly. Returns an
+ * empty list when no campus is configured.
+ */
+export async function fetchAnnouncements(campusId, signal) {
+  if (!campusId) return { announcements: [] };
+  const res = await fetch(
+    `${API_BASE_URL}/api/kiosk/announcements?campus_id=${encodeURIComponent(campusId)}`,
+    { signal }
+  );
+  if (!res.ok) {
+    throw new Error(`Duyuru isteği başarısız (${res.status})`);
+  }
+  const data = await res.json();
+  return {
+    announcements: (data.announcements || []).map((a) => ({
+      ...a,
+      image_url: a.image_url ? `${API_BASE_URL}${a.image_url}` : null,
+    })),
+  };
+}

@@ -140,17 +140,28 @@ body {
   margin-bottom: 0;
 }
 input,
-select {
+select,
+textarea {
   background: var(--bg);
   border: 1px solid var(--line);
   color: var(--text);
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 0.95rem;
+  font-family: inherit;
 }
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: 2px solid var(--accent);
+}
+textarea {
+  resize: vertical;
+}
+.row.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
 /* Buttons */

@@ -3,12 +3,15 @@ import enum
 from datetime import date, datetime, time, timezone
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Enum,
     ForeignKey,
     Index,
+    LargeBinary,
     String,
+    Text,
     Time,
     func,
 )
@@ -306,6 +309,50 @@ class Holiday(Base):
 
     __table_args__ = (
         Index("ix_holiday_date_campus", "date", "campus_id"),
+    )
+
+
+class Announcement(Base):
+    """A full-screen notice/banner shown on the campus kiosk(s).
+
+    Used for photo celebrations (özel gün tebriği), general staff notices, event
+    banners (örn. milli maç), etc. A ``campus_id`` of ``NULL`` shows the notice on
+    **every** campus's kiosk; a non-null value scopes it to one campus.
+
+    An optional image is stored as bytes *in the database* — production has no
+    persistent upload volume, only the Postgres ``pgdata`` volume, so keeping the
+    image in a row lets a notice survive ``docker compose up --build``. The kiosk
+    fetches the bytes from a separate public endpoint so its frequent polling
+    stays lightweight. A notice is visible when ``active`` is true and "now" is
+    within ``[starts_at, ends_at]`` — either bound may be ``NULL`` (open-ended).
+    """
+
+    __tablename__ = "announcements"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Image bytes + its MIME type (e.g. image/jpeg). Both null for a text notice.
+    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    image_mime: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # NULL = shown on every campus kiosk; otherwise scoped to one campus.
+    campus_id: Mapped[int | None] = mapped_column(
+        ForeignKey("campuses.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Optional schedule window (stored UTC-aware). Null start = "from now",
+    # null end = "until manually removed / deactivated".
+    starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
     )
 
 

@@ -372,6 +372,42 @@ class HolidayResponse(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# Announcements — full-screen kiosk notices (text and/or image)
+# --------------------------------------------------------------------------- #
+class AnnouncementResponse(BaseModel):
+    """Admin-panel view of a notice (metadata only — image fetched separately)."""
+
+    id: int
+    title: str | None = None
+    body: str | None = None
+    has_image: bool = False
+    image_url: str | None = None  # API path; the client prepends the API base
+    campus_id: int | None = None
+    campus_name: str | None = None
+    active: bool = True
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    created_at: datetime
+
+
+class AnnouncementActiveUpdate(BaseModel):
+    active: bool
+
+
+class KioskAnnouncement(BaseModel):
+    """A single notice the kiosk should display right now."""
+
+    id: int
+    title: str | None = None
+    body: str | None = None
+    image_url: str | None = None  # API path; the client prepends the API base
+
+
+class KioskAnnouncementsResponse(BaseModel):
+    announcements: list[KioskAnnouncement]
+
+
+# --------------------------------------------------------------------------- #
 # Reports — late / early-leave rankings, absence detail + aggregate stats
 # --------------------------------------------------------------------------- #
 class LateRankingEntry(BaseModel):

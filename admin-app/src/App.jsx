@@ -6,6 +6,7 @@ import Dashboard from "./components/Dashboard";
 import Staff from "./components/Staff";
 import Leaves from "./components/Leaves";
 import Holidays from "./components/Holidays";
+import Announcements from "./components/Announcements";
 import Calendar from "./components/Calendar";
 import Reports from "./components/Reports";
 import Directors from "./components/Directors";
@@ -125,6 +126,12 @@ export default function App() {
             Tatiller
           </button>
           <button
+            className={tab === "announcements" ? "tab tab--active" : "tab"}
+            onClick={() => setTab("announcements")}
+          >
+            Duyurular
+          </button>
+          <button
             className={tab === "calendar" ? "tab tab--active" : "tab"}
             onClick={() => setTab("calendar")}
           >
@@ -170,6 +177,7 @@ export default function App() {
         {tab === "staff" && <Staff isHq={isHq} />}
         {tab === "leaves" && <Leaves isHq={isHq} />}
         {tab === "holidays" && <Holidays isHq={isHq} />}
+        {tab === "announcements" && <Announcements isHq={isHq} />}
         {tab === "calendar" && <Calendar isHq={isHq} />}
         {tab === "reports" && <Reports isHq={isHq} />}
         {tab === "directors" && isHq && <Directors />}

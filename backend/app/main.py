@@ -15,6 +15,7 @@ from .bootstrap import (
 from .config import assert_production_security, settings
 from .deps import get_current_hq
 from .routers import (
+    announcements,
     auth,
     campuses,
     holidays,
@@ -75,6 +76,7 @@ app.include_router(leaves.router)
 app.include_router(holidays.router)
 app.include_router(reports.router)
 app.include_router(kiosk.router)
+app.include_router(announcements.router)
 
 
 @app.get("/health", tags=["system"])
