@@ -128,6 +128,57 @@ body {
   cursor: pointer;
 }
 
+/* ---- Install gate (Add to Home Screen) ---- */
+.install {
+  gap: 18px;
+}
+.install__logo {
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+.install__title {
+  font-size: 1.5rem;
+}
+.install__lead {
+  max-width: 360px;
+  line-height: 1.5;
+}
+.install__cta {
+  width: min(360px, 88vw);
+  font-size: 1.1rem;
+  padding: 17px 18px;
+}
+.install__steps {
+  text-align: left;
+  max-width: 360px;
+  width: 88vw;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px 18px 18px 38px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  line-height: 1.45;
+}
+.install__steps li {
+  padding-left: 4px;
+}
+.install__skip {
+  margin-top: 6px;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+.install__done {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 360px;
+}
+
 /* ---- Scanner ---- */
 .scanner {
   position: relative;
