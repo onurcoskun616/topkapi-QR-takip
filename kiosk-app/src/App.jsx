@@ -71,6 +71,12 @@ export default function App() {
   const [announcements, setAnnouncements] = useState([]);
   const [annIndex, setAnnIndex] = useState(0);
 
+  // Browsers force auto-playing video to be muted until the page gets a real
+  // user gesture. Nobody taps this kiosk (staff scan with their phones), so we
+  // surface a one-time "enable sound" button: a single tap unlocks audio for
+  // the whole session, and every announcement video then plays with sound.
+  const [soundOn, setSoundOn] = useState(false);
+
   const refresh = useCallback(async () => {
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -290,9 +296,19 @@ export default function App() {
     ? announcements[annIndex % announcements.length]
     : null;
 
-  // Scan confirmations / birthday celebrations overlay every layout.
+  // Whether any active notice carries a video — only then is a sound toggle
+  // meaningful (images and text have nothing to play).
+  const hasVideo = announcements.some((a) => a.video_url);
+
+  // Scan confirmations / birthday celebrations overlay every layout. The sound
+  // toggle rides along here so it shows in both the QR and announcement views.
   const overlays = (
     <>
+      {hasVideo && !soundOn && (
+        <button className="sound-toggle" onClick={() => setSoundOn(true)}>
+          🔊 Sesi Aç
+        </button>
+      )}
       {current?.kind === "birthday" && (
         <BirthdayOverlay name={current.name} onDone={dismiss} />
       )}
@@ -312,7 +328,7 @@ export default function App() {
     return (
       <div className="kiosk kiosk--announce">
         {overlays}
-        <Announcement data={announcement} />
+        <Announcement data={announcement} soundOn={soundOn} />
         <div className={`qr-corner ${isStale ? "qr-corner--stale" : ""}`}>
           <div className="qr-corner__code">
             {token ? (
