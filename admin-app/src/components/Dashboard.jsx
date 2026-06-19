@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth";
 import { api, downloadLogsXlsx } from "../api";
+import PresenceTrendChart from "./PresenceTrendChart";
 
 function todayLocalISO() {
   const d = new Date();
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+}
+
+// ISO date `days` before today (local), for the dashboard trend window.
+function daysAgoLocalISO(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
   const off = d.getTimezoneOffset();
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
 }
@@ -26,6 +35,7 @@ export default function Dashboard({ isHq }) {
   const [reminder, setReminder] = useState(null);
   const [pendingLeaves, setPendingLeaves] = useState(0);
   const [forgot, setForgot] = useState([]);
+  const [trend, setTrend] = useState(null);
 
   const campusFilter = isHq && campusId ? { campusId } : {};
 
@@ -75,6 +85,16 @@ export default function Dashboard({ isHq }) {
     api
       .forgotCheckout(token, { ...campusFilter })
       .then((res) => setForgot(res.entries))
+      .catch(() => {});
+    // Last 14 days' attendance trend for the dashboard chart.
+    api
+      .dailyTrend(token, {
+        startDate: daysAgoLocalISO(13),
+        endDate: todayLocalISO(),
+        excludeWeekends: true,
+        ...campusFilter,
+      })
+      .then(setTrend)
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, campusId]);
@@ -174,6 +194,12 @@ export default function Dashboard({ isHq }) {
       </section>
 
       {notice && <p className="notice">{notice}</p>}
+
+      {/* 14-day attendance trend */}
+      <section className="card">
+        <h2 className="card__title">Son 14 Gün — Geliş Oranı</h2>
+        <PresenceTrendChart trend={trend} />
+      </section>
 
       {/* Currently inside */}
       <section className="card">

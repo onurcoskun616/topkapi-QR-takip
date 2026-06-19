@@ -480,6 +480,45 @@ textarea {
 .dot--leave { background: #5aa9e6; }
 .dot--unresolved { background: var(--red); }
 
+/* ---- Line/area chart (presence trend) ---- */
+.lchart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lchart__svg {
+  width: 100%;
+  height: 200px;
+  overflow: visible;
+}
+.lchart__grid {
+  stroke: var(--panel-2);
+  stroke-width: 1;
+}
+.lchart__axis {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.lchart__area {
+  fill: var(--green);
+  opacity: 0.14;
+}
+.lchart__line {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.lchart__pt {
+  fill: var(--green);
+  stroke: var(--panel);
+  stroke-width: 1.5;
+}
+.lchart__foot {
+  text-align: right;
+}
+
 /* ---- Horizontal reason bars ---- */
 .hbars {
   display: flex;
