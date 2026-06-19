@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { useAuth } from "../auth";
+import {
+  startWatching,
+  subscribe as subscribeGeo,
+  getPermission,
+  getLocationForScan,
+} from "../geolocation";
 import LeaveRequest from "./LeaveRequest";
 
 const READER_ID = "qr-reader";
@@ -12,6 +18,15 @@ export default function Scanner() {
   const [result, setResult] = useState(null); // { kind, message }
   const [cameraError, setCameraError] = useState(null);
   const [checkout, setCheckout] = useState(null); // {should_check_out, minutes_overdue}
+  const [geoPerm, setGeoPerm] = useState(getPermission());
+
+  // Start watching the device location as soon as the scan screen opens, so the
+  // browser asks for permission up front and a fresh fix is ready at scan time
+  // (needed for campus geofencing).
+  useEffect(() => {
+    startWatching();
+    return subscribeGeo(() => setGeoPerm(getPermission()));
+  }, []);
 
   // Refresh the "still inside after shift" reminder (shown so the staff member
   // scans out before the nightly auto-close marks the day as a system OUT).
@@ -49,10 +64,9 @@ export default function Scanner() {
       if (lockRef.current) return;
       lockRef.current = true;
       setPhase("processing");
-      // Fire the scan request immediately and tear the camera down in parallel,
-      // so the success/failure shows as soon as the server replies instead of
-      // waiting for the camera to stop first.
-      const scanPromise = scan(decodedText);
+      // Grab the freshest location fix, then scan. The camera tears down in
+      // parallel so the result shows as soon as the server replies.
+      const scanPromise = getLocationForScan().then((loc) => scan(decodedText, loc));
       stopScanner();
       try {
         const res = await scanPromise;
@@ -144,6 +158,13 @@ export default function Scanner() {
         <div className="checkout-reminder">
           Mesai bitti ama hâlâ <strong>"içeride"</strong> görünüyorsunuz. Çıkış için QR
           okutmayı unutmayın — yoksa gün, sistem tarafından otomatik kapatılır.
+        </div>
+      )}
+
+      {(geoPerm === "denied" || geoPerm === "unavailable") && phase === "scanning" && (
+        <div className="checkout-reminder">
+          Konum kapalı görünüyor. Giriş/çıkış yalnızca okul konumunda yapılabildiği
+          için telefonunuzun <strong>konum iznini</strong> açın ve sayfayı yenileyin.
         </div>
       )}
 

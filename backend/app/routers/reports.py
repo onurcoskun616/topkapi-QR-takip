@@ -28,6 +28,7 @@ from ..models import (
     Holiday,
     LeaveRecord,
     LeaveStatus,
+    LocationViolation,
     User,
     UserRole,
     UserStatus,
@@ -45,6 +46,8 @@ from ..schemas import (
     ForgotCheckoutResponse,
     LateArrivalEntry,
     LateRankingEntry,
+    LocationAlertEntry,
+    LocationAlertsResponse,
     RiskReportResponse,
     RiskStaffEntry,
     UnresolvedReminderResponse,
@@ -838,6 +841,58 @@ async def forgot_checkout(
         )
     entries.sort(key=lambda e: -e.minutes_overdue)
     return ForgotCheckoutResponse(as_of=now_utc, entries=entries)
+
+
+@router.get("/location-alerts", response_model=LocationAlertsResponse)
+async def location_alerts(
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+    campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+):
+    """Far-from-campus QR scan attempts (geofence violations): a staff member
+    tried to scan in/out while their phone was outside the campus radius. The
+    attendance was rejected; each attempt is listed here for the manager."""
+    tz = ZoneInfo(settings.attendance_timezone)
+    scope = scope_campus_id(manager, campus_id)
+
+    stmt = (
+        select(LocationViolation, User, Campus)
+        .join(User, User.id == LocationViolation.user_id)
+        .join(Campus, Campus.id == LocationViolation.campus_id, isouter=True)
+    )
+    if scope is not None:
+        stmt = stmt.where(LocationViolation.campus_id == scope)
+    if start_date is not None:
+        start_utc = datetime.combine(start_date, time.min, tzinfo=tz).astimezone(timezone.utc)
+        stmt = stmt.where(LocationViolation.created_at >= start_utc)
+    if end_date is not None:
+        end_utc = datetime.combine(end_date, time.max, tzinfo=tz).astimezone(timezone.utc)
+        stmt = stmt.where(LocationViolation.created_at <= end_utc)
+    stmt = stmt.order_by(LocationViolation.created_at.desc()).limit(limit)
+
+    rows = await db.execute(stmt)
+    entries: list[LocationAlertEntry] = []
+    for v, user, campus in rows.all():
+        entries.append(
+            LocationAlertEntry(
+                id=v.id,
+                user_id=user.id,
+                full_name=user.full_name,
+                job_title=user.job_title,
+                branch=user.branch,
+                campus_name=campus.name if campus else None,
+                distance_m=round(v.distance_m),
+                accuracy_m=round(v.accuracy_m) if v.accuracy_m is not None else None,
+                latitude=v.latitude,
+                longitude=v.longitude,
+                maps_url=f"https://www.google.com/maps?q={v.latitude},{v.longitude}",
+                created_at=v.created_at,
+            )
+        )
+    return LocationAlertsResponse(count=len(entries), entries=entries)
 
 
 @router.get("/export.xlsx", response_class=StreamingResponse)

@@ -97,12 +97,12 @@ export function AuthProvider({ children }) {
    * Authenticated scan with automatic one-shot silent refresh: if the access
    * token expired mid-day, refresh once and retry before giving up.
    */
-  const scan = async (qrToken) => {
+  const scan = async (qrToken, location) => {
     try {
-      return await api.scan(accessRef.current, qrToken);
+      return await api.scan(accessRef.current, qrToken, location);
     } catch (err) {
       if (err.status === 401 && (await silentRefresh())) {
-        return await api.scan(accessRef.current, qrToken);
+        return await api.scan(accessRef.current, qrToken, location);
       }
       throw err;
     }

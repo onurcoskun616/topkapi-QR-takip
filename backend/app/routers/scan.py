@@ -18,10 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import settings
 from ..database import get_db
 from ..deps import get_current_active_staff
-from ..models import AttendanceType, User, UsedQrToken
+from ..models import AttendanceType, Campus, LocationViolation, User, UsedQrToken
 from ..schemas import ScanRequest, ScanResponse
 from ..security import decode_qr_token
-from ..services import get_active_leave_for_day, record_scan
+from ..services import get_active_leave_for_day, haversine_m, record_scan
+
+# Fallback geofence radius (metres) when a campus has coordinates but no explicit
+# radius set — matches the schema/model default.
+DEFAULT_GEOFENCE_RADIUS_M = 500
 
 router = APIRouter(prefix="/api", tags=["scan"])
 
@@ -79,6 +83,49 @@ async def scan(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Bu QR kod başka bir kampüse ait. Lütfen kendi kampüsünüzdeki kodu okutun.",
         )
+
+    # --- 1c. Geofence: the scan must come from within the campus radius ------
+    # Active only when the campus has coordinates configured (so campuses
+    # without a geofence keep working as before). Checked *before* consuming the
+    # QR token, so a rejected remote attempt never burns a code that a colleague
+    # standing at the kiosk could still use.
+    if current.campus_id is not None:
+        campus = await db.get(Campus, current.campus_id)
+        if campus and campus.latitude is not None and campus.longitude is not None:
+            if payload.latitude is None or payload.longitude is None:
+                # Location required (configured policy): no fix → no scan.
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Konumunuz alınamadı. Giriş/çıkış için telefonunuzun konum "
+                        "iznini açıp tekrar deneyin."
+                    ),
+                )
+            radius = campus.geofence_radius_m or DEFAULT_GEOFENCE_RADIUS_M
+            distance = haversine_m(
+                payload.latitude, payload.longitude, campus.latitude, campus.longitude
+            )
+            if distance > radius:
+                # Record the far-from-campus attempt for the panel, then reject
+                # without writing any attendance.
+                db.add(
+                    LocationViolation(
+                        user_id=current.id,
+                        campus_id=campus.id,
+                        latitude=payload.latitude,
+                        longitude=payload.longitude,
+                        distance_m=distance,
+                        accuracy_m=payload.accuracy,
+                    )
+                )
+                await db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        f"Okul konumunda görünmüyorsunuz (yaklaşık {round(distance)} m "
+                        "uzakta). Giriş/çıkış yalnızca okul konumunda yapılabilir."
+                    ),
+                )
 
     # --- 2. Replay protection: consume the jti exactly once ------------------
     db.add(UsedQrToken(jti=jti))

@@ -47,14 +47,20 @@ export const api = {
       headers: { Authorization: `Bearer ${accessToken}` },
     }),
 
-  scan: (accessToken, qrToken) =>
+  scan: (accessToken, qrToken, location) =>
     fetch(`${API_BASE_URL}/api/scan`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ qr_token: qrToken }),
+      body: JSON.stringify({
+        qr_token: qrToken,
+        // Sent for campus geofencing; null when no fix was available.
+        latitude: location?.latitude ?? null,
+        longitude: location?.longitude ?? null,
+        accuracy: location?.accuracy ?? null,
+      }),
     }).then(parse),
 
   // Suggested leave/absence kinds (Ücretli/Ücretsiz izin, …) — public list.

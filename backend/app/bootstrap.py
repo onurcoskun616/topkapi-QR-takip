@@ -37,6 +37,9 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("users", "tc_kimlik_no", "VARCHAR(11)"),
     ("leave_records", "decided_by_id", "INTEGER"),
     ("leave_records", "decided_at", "TIMESTAMP WITH TIME ZONE"),
+    ("campuses", "latitude", "DOUBLE PRECISION"),
+    ("campuses", "longitude", "DOUBLE PRECISION"),
+    ("campuses", "geofence_radius_m", "INTEGER"),
 ]
 
 # Unique indexes introduced after ``users`` was first created: (table, column,

@@ -71,6 +71,10 @@ export const api = {
   updateCampusShift: (token, campusId, payload) =>
     request(`/api/campuses/${campusId}/shift`, { method: "PATCH", token, body: payload }),
 
+  // Geofence (konum doğrulaması): set/clear a campus' coordinates + radius.
+  updateCampusLocation: (token, campusId, payload) =>
+    request(`/api/campuses/${campusId}/location`, { method: "PATCH", token, body: payload }),
+
   // --- staff management (director: own campus, hq: all/filter) ------------
   listStaff: (token, { status, campusId } = {}) =>
     request(`/api/staff${qs({ status, campus_id: campusId })}`, { token }),
@@ -212,6 +216,17 @@ export const api = {
 
   deleteAnnouncement: (token, id) =>
     request(`/api/announcements/${id}`, { method: "DELETE", token }),
+
+  // --- location alerts (far-from-campus QR scan attempts) ----------------
+  locationAlerts: (token, { campusId, startDate, endDate } = {}) =>
+    request(
+      `/api/reports/location-alerts${qs({
+        campus_id: campusId,
+        start_date: startDate,
+        end_date: endDate,
+      })}`,
+      { token }
+    ),
 
   // --- forgot-to-check-out reminder (still inside after shift end) --------
   forgotCheckout: (token, { campusId, thresholdMinutes } = {}) =>

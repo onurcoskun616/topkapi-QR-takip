@@ -7,8 +7,10 @@ from sqlalchemy import (
     Date,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Index,
+    Integer,
     LargeBinary,
     String,
     Text,
@@ -97,6 +99,17 @@ class Campus(Base):
     # (enforced in the router, not here); directors have no write access.
     shift_start: Mapped[time | None] = mapped_column(Time, nullable=True)
     shift_end: Mapped[time | None] = mapped_column(Time, nullable=True)
+
+    # Geofence (konum doğrulaması): the campus' coordinates and the allowed
+    # radius in metres. A staff QR scan is only accepted when the phone reports a
+    # location within this radius of the campus. Geofencing is OFF until both
+    # latitude and longitude are set — so campuses without coordinates keep
+    # working exactly as before. ``geofence_radius_m`` defaults to 500.
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    geofence_radius_m: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=500
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -353,6 +366,35 @@ class Announcement(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class LocationViolation(Base):
+    """A staff QR-scan attempt rejected because the phone was too far from campus.
+
+    Recorded only when geofencing is active for the campus and the reported
+    location is outside the allowed radius — the attendance IN/OUT is *not*
+    written; this row is the audit trail surfaced to managers ("şu kişi okul
+    konumundan uzakta QR okuma denemesi yaptı").
+    """
+
+    __tablename__ = "location_violations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    campus_id: Mapped[int | None] = mapped_column(
+        ForeignKey("campuses.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    # Straight-line distance to the campus (metres) and the phone's reported GPS
+    # accuracy radius (metres), kept for context when reviewing an alert.
+    distance_m: Mapped[float] = mapped_column(Float, nullable=False)
+    accuracy_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True, nullable=False
     )
 
 

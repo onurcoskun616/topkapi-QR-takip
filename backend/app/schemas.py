@@ -25,6 +25,9 @@ class CampusResponse(BaseModel):
     slug: str
     shift_start: time | None = None
     shift_end: time | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    geofence_radius_m: int | None = None
 
 
 class CampusShiftUpdate(BaseModel):
@@ -32,6 +35,18 @@ class CampusShiftUpdate(BaseModel):
 
     shift_start: time
     shift_end: time
+
+
+class CampusLocationUpdate(BaseModel):
+    """hq-only: set a campus' geofence (coordinates + allowed radius in metres).
+
+    Send ``latitude``/``longitude`` as null to turn geofencing off for the
+    campus (scans are then accepted without a location check, as before).
+    """
+
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    geofence_radius_m: int = Field(default=500, ge=50, le=20000)
 
 
 # --------------------------------------------------------------------------- #
@@ -214,6 +229,12 @@ class QrTokenStatusResponse(BaseModel):
 # --------------------------------------------------------------------------- #
 class ScanRequest(BaseModel):
     qr_token: str = Field(min_length=1)
+    # Phone location at scan time, for campus geofencing. Null when the device
+    # couldn't provide a fix (permission denied / GPS off / no signal); the
+    # server then rejects the scan for any campus that has geofencing enabled.
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    accuracy: float | None = Field(default=None, ge=0)
 
 
 class ScanResponse(BaseModel):
@@ -578,6 +599,29 @@ class ForgotCheckoutEntry(BaseModel):
 class ForgotCheckoutResponse(BaseModel):
     as_of: datetime
     entries: list[ForgotCheckoutEntry]
+
+
+# --------------------------------------------------------------------------- #
+# Location alerts — far-from-campus QR scan attempts (geofence violations)
+# --------------------------------------------------------------------------- #
+class LocationAlertEntry(BaseModel):
+    id: int
+    user_id: int
+    full_name: str
+    job_title: str | None = None
+    branch: str | None = None
+    campus_name: str | None = None
+    distance_m: int
+    accuracy_m: int | None = None
+    latitude: float
+    longitude: float
+    maps_url: str          # quick link to open the reported spot on a map
+    created_at: datetime
+
+
+class LocationAlertsResponse(BaseModel):
+    count: int
+    entries: list[LocationAlertEntry]
 
 
 class MyStatusResponse(BaseModel):

@@ -9,6 +9,7 @@ import Holidays from "./components/Holidays";
 import Announcements from "./components/Announcements";
 import Calendar from "./components/Calendar";
 import Reports from "./components/Reports";
+import LocationAlerts from "./components/LocationAlerts";
 import Directors from "./components/Directors";
 import Campuses from "./components/Campuses";
 
@@ -143,6 +144,12 @@ export default function App() {
           >
             Raporlar
           </button>
+          <button
+            className={tab === "location" ? "tab tab--active" : "tab"}
+            onClick={() => setTab("location")}
+          >
+            Konum Uyarıları
+          </button>
           {isHq && (
             <button
               className={tab === "directors" ? "tab tab--active" : "tab"}
@@ -180,6 +187,7 @@ export default function App() {
         {tab === "announcements" && <Announcements isHq={isHq} />}
         {tab === "calendar" && <Calendar isHq={isHq} />}
         {tab === "reports" && <Reports isHq={isHq} />}
+        {tab === "location" && <LocationAlerts isHq={isHq} />}
         {tab === "directors" && isHq && <Directors />}
         {tab === "campuses" && isHq && <Campuses />}
       </main>
