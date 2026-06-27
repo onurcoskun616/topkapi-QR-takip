@@ -110,6 +110,59 @@ export const api = {
   updateDirectorPassword: (token, id, password) =>
     request(`/api/directors/${id}/password`, { method: "POST", token, body: { password } }),
 
+  // --- departments / quotas / registration targets (hq writes, managers read)
+  listDepartments: (token, { campusId } = {}) =>
+    request(`/api/departments${qs({ campus_id: campusId })}`, { token }),
+
+  createDepartment: (token, payload) =>
+    request("/api/departments", { method: "POST", token, body: payload }),
+
+  updateDepartment: (token, id, payload) =>
+    request(`/api/departments/${id}`, { method: "PATCH", token, body: payload }),
+
+  setDepartmentTargets: (token, id, targets) =>
+    request(`/api/departments/${id}/targets`, { method: "PUT", token, body: { targets } }),
+
+  deleteDepartment: (token, id) =>
+    request(`/api/departments/${id}`, { method: "DELETE", token }),
+
+  // --- student registrations (director: own campus, hq: all/filter) --------
+  listRegistrations: (
+    token,
+    { campusId, departmentId, grade, section, status, approved, channel, q } = {}
+  ) =>
+    request(
+      `/api/registrations${qs({
+        campus_id: campusId,
+        department_id: departmentId,
+        grade,
+        section,
+        status,
+        approved,
+        channel,
+        q,
+      })}`,
+      { token }
+    ),
+
+  createRegistration: (token, payload) =>
+    request("/api/registrations", { method: "POST", token, body: payload }),
+
+  updateRegistration: (token, id, payload) =>
+    request(`/api/registrations/${id}`, { method: "PATCH", token, body: payload }),
+
+  approveRegistration: (token, id) =>
+    request(`/api/registrations/${id}/approve`, { method: "POST", token }),
+
+  unapproveRegistration: (token, id) =>
+    request(`/api/registrations/${id}/unapprove`, { method: "POST", token }),
+
+  deleteRegistration: (token, id) =>
+    request(`/api/registrations/${id}`, { method: "DELETE", token }),
+
+  registrationSummary: (token, { campusId } = {}) =>
+    request(`/api/registrations/summary${qs({ campus_id: campusId })}`, { token }),
+
   // --- reporting ----------------------------------------------------------
   todaySummary: (token, { campusId } = {}) =>
     request(`/api/logs/summary/today${qs({ campus_id: campusId })}`, { token }),

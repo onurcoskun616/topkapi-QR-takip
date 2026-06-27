@@ -12,9 +12,23 @@ from .models import (
     AttendanceLog,
     AttendanceStatus,
     AttendanceType,
+    INTERNAL_ARRIVAL_CHANNEL,
     LeaveRecord,
     LeaveStatus,
 )
+
+
+def is_internal_channel(channel: str | None) -> bool:
+    """True when an arrival channel (Geliş Kanalı) counts as an *internal*
+    registration (iç kayıt); every other channel is external (dış kayıt).
+
+    Matching is case-insensitive and tolerant of the Turkish dotted-İ: both
+    "İç Kayıt" and a hand-typed "iç kayıt" resolve to internal.
+    """
+    # "İ".lower() yields "i̇" (i + combining dot above) — normalise it away so the
+    # canonical "İç Kayıt" and a lowercase "iç kayıt" compare equal.
+    c = (channel or "").strip().lower().replace("i̇", "i")
+    return c == INTERNAL_ARRIVAL_CHANNEL.strip().lower().replace("i̇", "i")
 
 # Suggested leave/absence reasons shown in the admin UI dropdown. Free text is
 # still accepted ("ve benzeri" — the list is explicitly open-ended), so this is

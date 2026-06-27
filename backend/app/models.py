@@ -86,6 +86,30 @@ class LeaveStatus(str, enum.Enum):
     cancelled = "cancelled"  # corrected/withdrawn — no longer blocks anything
 
 
+# The four high-school grades (sınıf) that carry per-department registration
+# targets (kayıt hedefi). Centralised so the model, the API and the reports all
+# agree on which grades exist.
+REGISTRATION_GRADES: tuple[int, ...] = (9, 10, 11, 12)
+
+# The single arrival channel (Geliş Kanalı) that counts as an *internal*
+# registration (iç kayıt). Every other channel is treated as external
+# (dış kayıt). See ``app.services.is_internal_channel`` for the matcher.
+INTERNAL_ARRIVAL_CHANNEL = "İç Kayıt"
+
+
+class RegistrationStatus(str, enum.Enum):
+    """Lifecycle of a student registration (öğrenci kayıt durumu).
+
+    A registration only counts toward a department's license quota and its
+    internal/external targets once it is ``registered`` **and** approved by a
+    campus manager (see ``StudentRegistration.approved``).
+    """
+
+    prospective = "prospective"  # aday — görüşülüyor, henüz kayıt yapılmadı
+    registered = "registered"    # kayıt yapıldı
+    cancelled = "cancelled"      # iptal / vazgeçti
+
+
 class Campus(Base):
     """A physical campus (İkitelli OSB, İstanbul OSB, Esenyurt, Kıraç, Çorlu)."""
 
@@ -462,6 +486,119 @@ class UsedQrToken(Base):
     jti: Mapped[str] = mapped_column(String(64), primary_key=True)
     used_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class Department(Base):
+    """A campus' academic department / school type (bölüm), e.g. "Anadolu
+    Lisesi", "Fen Lisesi". Each belongs to exactly one campus and carries the
+    MEB-issued license quota (``license_quota`` — ruhsat kontenjanı): the
+    department may never hold more *confirmed* student registrations than this.
+
+    Departments and their quotas are managed centrally (head office / merkez);
+    a campus director may only read them.
+    """
+
+    __tablename__ = "departments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    campus_id: Mapped[int] = mapped_column(
+        ForeignKey("campuses.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # MEB-issued license quota (ruhsat kontenjanı): the hard ceiling on confirmed
+    # registrations across all grades of this department.
+    license_quota: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    targets: Mapped[list["RegistrationTarget"]] = relationship(
+        back_populates="department", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        # A department name is unique within a campus (two campuses may both run
+        # an "Anadolu Lisesi", but one campus never has it twice).
+        Index("uq_department_campus_name", "campus_id", "name", unique=True),
+    )
+
+
+class RegistrationTarget(Base):
+    """The registration goal (kayıt hedefi) for one department + one grade
+    (9/10/11/12), split into an internal (iç kayıt) and an external (dış kayıt)
+    target. Set centrally by head office (merkez)."""
+
+    __tablename__ = "registration_targets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    department_id: Mapped[int] = mapped_column(
+        ForeignKey("departments.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    grade: Mapped[int] = mapped_column(Integer, nullable=False)  # 9..12
+    internal_target: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    external_target: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    department: Mapped["Department"] = relationship(back_populates="targets")
+
+    __table_args__ = (
+        Index("uq_target_department_grade", "department_id", "grade", unique=True),
+    )
+
+
+class StudentRegistration(Base):
+    """One student's registration record for a campus department.
+
+    A record counts toward the department's license quota and toward the
+    internal/external target of its (department, grade) **only when** it is both
+    ``registered`` (status) and ``approved`` (by a campus manager). Its kind —
+    internal vs external — is derived from the arrival channel (Geliş Kanalı):
+    the channel ``İç Kayıt`` is internal, every other channel is external (see
+    ``app.services.is_internal_channel``).
+    """
+
+    __tablename__ = "student_registrations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Denormalised campus for scoping/queries; always equals department.campus_id
+    # (the router keeps them in sync).
+    campus_id: Mapped[int] = mapped_column(
+        ForeignKey("campuses.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    department_id: Mapped[int] = mapped_column(
+        ForeignKey("departments.id", ondelete="RESTRICT"), index=True, nullable=False
+    )
+    full_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    grade: Mapped[int] = mapped_column(Integer, nullable=False)  # 9..12
+    section: Mapped[str | None] = mapped_column(String(20), nullable=True)  # şube, e.g. "A"
+    # Geliş Kanalı (free text — open-ended): "İç Kayıt", "Tavsiye", "Reklam", …
+    arrival_channel: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[RegistrationStatus] = mapped_column(
+        Enum(RegistrationStatus, name="registration_status"),
+        default=RegistrationStatus.prospective,
+        nullable=False,
+    )
+    # Müdür / müdür yardımcısı onayı. A registration is credited to the quota and
+    # the targets only when this is true AND status is ``registered``.
+    approved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    approved_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    department: Mapped["Department"] = relationship()
+
+    __table_args__ = (
+        Index("ix_student_reg_dept_grade", "department_id", "grade"),
+        Index("ix_student_reg_campus", "campus_id"),
     )
 
 

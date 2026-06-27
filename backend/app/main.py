@@ -25,6 +25,7 @@ from .routers import (
     management,
     push,
     qr,
+    registrations,
     reports,
     scan,
 )
@@ -70,6 +71,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(campuses.router)
 app.include_router(management.router)
+app.include_router(registrations.router)
 app.include_router(qr.router)
 app.include_router(scan.router)
 app.include_router(logs.router)

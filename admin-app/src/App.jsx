@@ -12,6 +12,7 @@ import Reports from "./components/Reports";
 import LocationAlerts from "./components/LocationAlerts";
 import Directors from "./components/Directors";
 import Campuses from "./components/Campuses";
+import Registrations from "./components/Registrations";
 
 function ChangePasswordModal({ token, onClose }) {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -145,6 +146,12 @@ export default function App() {
             Raporlar
           </button>
           <button
+            className={tab === "registrations" ? "tab tab--active" : "tab"}
+            onClick={() => setTab("registrations")}
+          >
+            Öğrenci Kayıtları
+          </button>
+          <button
             className={tab === "location" ? "tab tab--active" : "tab"}
             onClick={() => setTab("location")}
           >
@@ -187,6 +194,7 @@ export default function App() {
         {tab === "announcements" && <Announcements isHq={isHq} />}
         {tab === "calendar" && <Calendar isHq={isHq} />}
         {tab === "reports" && <Reports isHq={isHq} />}
+        {tab === "registrations" && <Registrations isHq={isHq} />}
         {tab === "location" && <LocationAlerts isHq={isHq} />}
         {tab === "directors" && isHq && <Directors />}
         {tab === "campuses" && isHq && <Campuses />}

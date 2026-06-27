@@ -8,6 +8,8 @@ from .models import (
     AttendanceStatus,
     AttendanceType,
     LeaveStatus,
+    REGISTRATION_GRADES,
+    RegistrationStatus,
     UserRole,
     UserStatus,
 )
@@ -679,6 +681,134 @@ class TodaySummary(BaseModel):
     active_today: int
     currently_in_count: int
     currently_in: list[PresenceEntry]
+
+
+# --------------------------------------------------------------------------- #
+# Student registration — departments, quotas, targets, registrations
+# --------------------------------------------------------------------------- #
+class RegistrationTargetItem(BaseModel):
+    """A department's internal/external goal for one grade (9/10/11/12)."""
+
+    grade: int = Field(ge=9, le=12)
+    internal_target: int = Field(default=0, ge=0)
+    external_target: int = Field(default=0, ge=0)
+
+
+class DepartmentCreate(BaseModel):
+    """hq-only: create a campus department with its MEB license quota."""
+
+    campus_id: int
+    name: str = Field(min_length=1, max_length=120)
+    license_quota: int = Field(default=0, ge=0)
+
+
+class DepartmentUpdate(BaseModel):
+    """hq-only: rename a department or change its license quota."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    license_quota: int | None = Field(default=None, ge=0)
+
+
+class DepartmentTargetsUpdate(BaseModel):
+    """hq-only: replace the per-grade registration targets for a department.
+
+    Grades omitted from the list are cleared back to 0/0. At most one entry per
+    grade is allowed.
+    """
+
+    targets: list[RegistrationTargetItem] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_unique_grades(self):
+        grades = [t.grade for t in self.targets]
+        if len(grades) != len(set(grades)):
+            raise ValueError("Her sınıf için en fazla bir hedef girilebilir.")
+        return self
+
+
+class DepartmentResponse(BaseModel):
+    id: int
+    campus_id: int
+    campus_name: str | None = None
+    name: str
+    license_quota: int
+    targets: list[RegistrationTargetItem]
+    # Confirmed (registered + approved) registrations currently held, and how
+    # many license slots remain.
+    confirmed_count: int = 0
+    remaining_quota: int = 0
+    created_at: datetime
+
+
+class StudentRegistrationCreate(BaseModel):
+    department_id: int
+    full_name: str = Field(min_length=2, max_length=120)
+    grade: int = Field(ge=9, le=12)
+    section: str | None = Field(default=None, max_length=20)
+    arrival_channel: str = Field(min_length=1, max_length=80)
+    status: RegistrationStatus = RegistrationStatus.prospective
+    approved: bool = False
+
+
+class StudentRegistrationUpdate(BaseModel):
+    """Partial update; only provided fields change. ``approved`` is handled via
+    the dedicated approve/unapprove endpoints, not here."""
+
+    department_id: int | None = None
+    full_name: str | None = Field(default=None, min_length=2, max_length=120)
+    grade: int | None = Field(default=None, ge=9, le=12)
+    section: str | None = Field(default=None, max_length=20)
+    arrival_channel: str | None = Field(default=None, min_length=1, max_length=80)
+    status: RegistrationStatus | None = None
+
+
+class StudentRegistrationResponse(BaseModel):
+    id: int
+    campus_id: int
+    campus_name: str | None = None
+    department_id: int
+    department_name: str | None = None
+    full_name: str
+    grade: int
+    section: str | None = None
+    arrival_channel: str
+    # Derived: True when the arrival channel is the internal one (iç kayıt).
+    is_internal: bool
+    status: RegistrationStatus
+    approved: bool
+    # True when this record currently counts toward the quota/targets
+    # (status == registered AND approved).
+    counts_toward_target: bool
+    approved_by_name: str | None = None
+    approved_at: datetime | None = None
+    created_at: datetime
+
+
+class RegistrationGradeSummary(BaseModel):
+    """One (department, grade) row of the registration dashboard."""
+
+    grade: int
+    internal_target: int
+    external_target: int
+    internal_count: int
+    external_count: int
+
+
+class RegistrationDepartmentSummary(BaseModel):
+    department_id: int
+    department_name: str
+    campus_id: int
+    campus_name: str | None = None
+    license_quota: int
+    confirmed_count: int      # registered + approved, all grades
+    remaining_quota: int      # license_quota − confirmed_count (never below 0)
+    over_quota: bool          # confirmed_count > license_quota (data sanity flag)
+    grades: list[RegistrationGradeSummary]
+
+
+class RegistrationSummaryResponse(BaseModel):
+    grades: list[int] = Field(default_factory=lambda: list(REGISTRATION_GRADES))
+    departments: list[RegistrationDepartmentSummary]
 
 
 # --------------------------------------------------------------------------- #

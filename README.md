@@ -110,6 +110,19 @@ Backend için **FastAPI** seçildi: async I/O, otomatik OpenAPI dokümantasyonu
     tanımlı değilse özellik tamamen kapalıdır ve uygulama aynen çalışır.
     Anahtar üretimi: `python -m app.tools.vapid_keys`. (iOS'ta yalnızca **Ana
     Ekrana Eklenmiş** PWA'da çalışır; Android Chrome'da tarayıcıda da çalışır.)
+17. **Öğrenci kayıt kontenjanı ve hedef takibi:** Her kampüsün kendi
+    **bölümleri** (Anadolu Lisesi, Fen Lisesi, …) ve her bölümün MEB tarafından
+    belirlenen bir **ruhsat kontenjanı** vardır; bir bölüme ruhsat
+    kontenjanından fazla **onaylı** kayıt alınamaz (aşımda onay **409** ile
+    reddedilir). Her bölümün 9/10/11/12. sınıfları için merkez (genel merkez)
+    tarafından belirlenen **iç kayıt** ve **dış kayıt hedefleri** tutulur. Bir
+    öğrencinin **Geliş Kanalı** `İç Kayıt` ise iç kayıt, diğer kanallar dış
+    kayıt sayılır. Arama formundaki bir kayıt yalnızca **Kayıt Durumu = kayıt
+    yapıldı** *ve* **müdür/müdür yardımcısı onayı** verildiğinde; sınıfı, şubesi,
+    bölümü ve geliş kanalına göre ilgili iç/dış kayıt hedefine yazılır. Bölüm ve
+    kontenjan/hedef tanımları yalnızca genel merkezindir; müdürler kendi
+    kampüslerinin öğrenci kayıtlarını yönetir. (Sistemde ayrı bir "müdür
+    yardımcısı" rolü yoktur; onay yetkisi kampüs yöneticisi rolündedir.)
 
 ## Hızlı başlangıç (Docker)
 
