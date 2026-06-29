@@ -51,8 +51,9 @@ const MAX_PENDING = 4;
 // kiosk can roll over to a fresh code right away instead of leaving a dead
 // one on screen for the rest of its 15s window — useful with several kiosks
 // at one campus, where the next person may well be standing at this exact
-// tablet moments after someone else's scan.
-const TOKEN_STATUS_POLL_MS = 800;
+// tablet moments after someone else's scan. Kept brisk so the new code shows
+// almost immediately after a scan (the next person never faces a dead code).
+const TOKEN_STATUS_POLL_MS = 400;
 // How often we refresh the list of notices to show, and — when more than one is
 // active — how long each stays on screen before rotating to the next.
 const ANNOUNCE_POLL_MS = 20000;
