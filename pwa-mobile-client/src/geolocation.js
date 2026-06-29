@@ -39,7 +39,12 @@ export function startWatching() {
       permission = err.code === 1 ? "denied" : "unavailable";
       emit();
     },
-    { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
+    // Coarse (network/Wi-Fi/cell) location, not GPS: a campus geofence is
+    // hundreds of metres wide, so we don't need GPS precision — and high
+    // accuracy makes iOS time out indoors (a school building) where GPS is
+    // weak. maximumAge lets the OS hand back its recent fix instead of a slow
+    // cold start, so `latest` stays populated.
+    { enableHighAccuracy: false, maximumAge: 30000, timeout: 30000 }
   );
 }
 
@@ -62,7 +67,7 @@ export function getPermission() {
  * off right after one real fix would let every later scan keep riding on
  * that stale reading.)
  */
-export async function getLocationForScan({ maxAgeMs = 5000, timeout = 8000 } = {}) {
+export async function getLocationForScan({ maxAgeMs = 60000, timeout = 15000 } = {}) {
   if (latest && Date.now() - latest.ts <= maxAgeMs) {
     const { latitude, longitude, accuracy } = latest;
     return { latitude, longitude, accuracy };
@@ -94,7 +99,10 @@ export async function getLocationForScan({ maxAgeMs = 5000, timeout = 8000 } = {
         emit();
         resolve(null);
       },
-      { enableHighAccuracy: true, timeout, maximumAge: 0 }
+      // Coarse + allow a recent OS-cached fix (see startWatching): enough for a
+      // campus-sized geofence and far more reliable than a GPS cold start
+      // indoors, which is exactly where staff scan (inside the building).
+      { enableHighAccuracy: false, timeout, maximumAge: 60000 }
     );
   });
 }
