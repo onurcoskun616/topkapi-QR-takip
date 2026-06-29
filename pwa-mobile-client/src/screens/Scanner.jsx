@@ -116,13 +116,27 @@ export default function Scanner() {
 
     scanner
       .start(
-        { facingMode: "environment" },
+        // Ask for a higher-resolution rear camera. iPhones often default to a
+        // capture too low-res to decode a QR shown on a tablet across the
+        // counter — the camera opens fine but never reads. A larger frame fixes
+        // that and only helps Android (which already worked).
+        {
+          facingMode: "environment",
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
         // No qrbox: the library would otherwise draw its own scan-region UI
         // (corner brackets) positioned from the raw video frame, which drifts
         // out of alignment with our CSS-centered yellow frame once the video is
         // letterboxed by object-fit: cover. Scanning the whole frame keeps a
         // single, accurate guide (our .scanner__frame) and decodes anywhere.
-        { fps: 10 },
+        // useBarCodeDetectorIfSupported uses the platform's native QR decoder
+        // when present (faster/more reliable than the bundled JS fallback) and
+        // silently falls back where it isn't.
+        {
+          fps: 10,
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        },
         handleDecoded,
         () => {} // per-frame decode failures are normal; ignore
       )

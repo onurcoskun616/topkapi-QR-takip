@@ -13,6 +13,12 @@ never replays old scans; the kiosk also de-dupes by ``log_id`` to show each
 scan once. A scan is flagged ``birthday`` when it is the staff member's first
 IN of the day and today is their birthday — the kiosk shows the celebration
 instead of a plain confirmation for those.
+
+A campus can run several kiosks at once. Each generates and keeps its own
+``kiosk_id`` and sends it here, so a tablet only confirms scans whose QR code
+it itself displayed — not a colleague's scan that happened to be confirmed on
+a different tablet at the same campus. A kiosk that doesn't send one (older
+cached build) falls back to the old campus-wide behaviour.
 """
 from datetime import datetime, timezone
 
@@ -57,6 +63,9 @@ RECENT_SCAN_WINDOW_SECONDS = 12
 @router.get("/recent-scans", response_model=RecentScansResponse)
 async def recent_scans(
     campus_id: int = Query(..., description="The kiosk's campus (from the tablet URL ?campus=)"),
+    kiosk_id: str | None = Query(
+        None, description="This tablet's own id, to confirm only its own scans"
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     tz = ZoneInfo(settings.attendance_timezone)
@@ -88,16 +97,19 @@ async def recent_scans(
     # Today's valid QR scans for this campus's staff (manual director entries
     # and the nightly auto-close are excluded — nobody is standing at the
     # tablet for those).
+    conditions = [
+        AttendanceLog.user_id.in_(staff.keys()),
+        AttendanceLog.source == AttendanceSource.qr_scan,
+        AttendanceLog.status == AttendanceStatus.valid,
+        AttendanceLog.scan_time >= start_utc,
+        AttendanceLog.scan_time <= end_utc,
+    ]
+    # A tablet that identifies itself only confirms scans made against its own
+    # code; one that doesn't (older cached build) keeps the old campus-wide feed.
+    if kiosk_id:
+        conditions.append(AttendanceLog.kiosk_id == kiosk_id)
     log_rows = await db.execute(
-        select(AttendanceLog)
-        .where(
-            AttendanceLog.user_id.in_(staff.keys()),
-            AttendanceLog.source == AttendanceSource.qr_scan,
-            AttendanceLog.status == AttendanceStatus.valid,
-            AttendanceLog.scan_time >= start_utc,
-            AttendanceLog.scan_time <= end_utc,
-        )
-        .order_by(AttendanceLog.scan_time.asc())
+        select(AttendanceLog).where(*conditions).order_by(AttendanceLog.scan_time.asc())
     )
     todays_logs = list(log_rows.scalars().all())
 

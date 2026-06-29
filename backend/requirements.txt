@@ -14,11 +14,16 @@ apscheduler==3.10.4
 tzlocal==5.2
 email-validator==2.1.1
 openpyxl==3.1.5
-# Web Push (VAPID) notifications to the staff PWA. Pure-Python wheels (no build
-# step), so they install cleanly on the python:3.12-slim image. The feature
-# stays dormant unless VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY are configured.
-webpush==1.0.6
+# httpx: required by Starlette's TestClient (see tests/conftest.py) and reused
+# by the optional Web Push sender. Pure-Python wheel — installs on slim images.
 httpx==0.27.0
+# NOTE: the `webpush` library is intentionally NOT pinned here. Its current
+# releases force major upgrades of pydantic/cryptography (e.g. 1.0.6 needs
+# pydantic>=2.11.7), which we don't want to drag into production for an optional
+# feature. The Web Push code (app/notifications.py) guards its import, so push
+# simply stays disabled while the library is absent — everything else works.
+# To enable push later, add a `webpush` pin whose deps match these versions
+# (or bump pydantic/cryptography deliberately) and re-run the test suite.
 # Test-only: backend/tests/conftest.py spins up a real app instance against a
 # throwaway SQLite DB per test (production uses asyncpg/PostgreSQL).
 aiosqlite==0.22.1
