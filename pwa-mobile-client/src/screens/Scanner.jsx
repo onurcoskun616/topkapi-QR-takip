@@ -114,39 +114,46 @@ export default function Scanner() {
     const scanner = new Html5Qrcode(READER_ID, { verbose: false });
     scannerRef.current = scanner;
 
-    scanner
-      .start(
-        // Ask for a higher-resolution rear camera. iPhones often default to a
-        // capture too low-res to decode a QR shown on a tablet across the
-        // counter — the camera opens fine but never reads. A larger frame fixes
-        // that and only helps Android (which already worked).
-        {
-          facingMode: "environment",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        // No qrbox: the library would otherwise draw its own scan-region UI
-        // (corner brackets) positioned from the raw video frame, which drifts
-        // out of alignment with our CSS-centered yellow frame once the video is
-        // letterboxed by object-fit: cover. Scanning the whole frame keeps a
-        // single, accurate guide (our .scanner__frame) and decodes anywhere.
-        // useBarCodeDetectorIfSupported uses the platform's native QR decoder
-        // when present (faster/more reliable than the bundled JS fallback) and
-        // silently falls back where it isn't.
-        {
-          fps: 10,
-          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-        },
-        handleDecoded,
-        () => {} // per-frame decode failures are normal; ignore
-      )
-      .catch((err) => {
-        if (!cancelled) {
-          setCameraError(
-            "Kameraya erişilemedi. Lütfen tarayıcı izinlerini kontrol edin."
-          );
+    // No qrbox: the library would otherwise draw its own scan-region UI (corner
+    // brackets) positioned from the raw video frame, which drifts out of
+    // alignment with our CSS-centered yellow frame once the video is letterboxed
+    // by object-fit: cover. Scanning the whole frame keeps a single, accurate
+    // guide (our .scanner__frame) and decodes anywhere.
+    // useBarCodeDetectorIfSupported uses the platform's native QR decoder when
+    // present (faster/more reliable than the bundled JS fallback), silently
+    // falling back where it isn't.
+    const scanConfig = {
+      fps: 10,
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+    };
+
+    (async () => {
+      // Prefer a higher-resolution rear camera: iPhones often default to a
+      // capture too low-res to decode a QR shown on a tablet across the counter
+      // (camera opens but never reads). But some iOS versions REJECT resolution
+      // hints outright (the camera then won't open at all), so if the rich
+      // request fails we retry with the plain rear-camera request that always
+      // worked before. Only a real permission/hardware failure shows the error.
+      try {
+        await scanner.start(
+          { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+          scanConfig,
+          handleDecoded,
+          () => {} // per-frame decode failures are normal; ignore
+        );
+      } catch {
+        if (cancelled) return;
+        try {
+          await scanner.start({ facingMode: "environment" }, scanConfig, handleDecoded, () => {});
+        } catch {
+          if (!cancelled) {
+            setCameraError(
+              "Kameraya erişilemedi. Lütfen tarayıcı izinlerini kontrol edin."
+            );
+          }
         }
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
