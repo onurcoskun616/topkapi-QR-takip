@@ -5,6 +5,23 @@ const API_BASE_URL =
 // announcement's image) that aren't fetched through `request()`.
 export const apiBaseUrl = API_BASE_URL;
 
+// Turn a FastAPI error body into a readable string. `detail` may be a string
+// (our HTTPExceptions), an array of {loc,msg} (422 validation errors), or an
+// object — without this a non-string detail renders in the UI as
+// "[object Object]" and hides the real error.
+function errorMessage(data, status) {
+  const detail = data && data.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const msg = detail.map((d) => d && d.msg).filter(Boolean).join(", ");
+    if (msg) return msg;
+  } else if (detail && typeof detail === "object" && typeof detail.msg === "string") {
+    return detail.msg;
+  }
+  if (typeof data === "string" && data) return data;
+  return `İstek başarısız (${status})`;
+}
+
 async function request(path, { method = "GET", body, token } = {}) {
   const headers = {};
   if (body) headers["Content-Type"] = "application/json";
@@ -25,8 +42,7 @@ async function request(path, { method = "GET", body, token } = {}) {
   }
 
   if (!res.ok) {
-    const detail = (data && data.detail) || `İstek başarısız (${res.status})`;
-    const err = new Error(detail);
+    const err = new Error(errorMessage(data, res.status));
     err.status = res.status;
     throw err;
   }
@@ -204,7 +220,7 @@ export const api = {
       data = text;
     }
     if (!res.ok) {
-      const err = new Error((data && data.detail) || `İstek başarısız (${res.status})`);
+      const err = new Error(errorMessage(data, res.status));
       err.status = res.status;
       throw err;
     }

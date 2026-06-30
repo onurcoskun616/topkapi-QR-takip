@@ -67,9 +67,13 @@ export default function Campuses() {
     setError(null);
     setNotice(null);
     try {
+      // A <input type="time"> gives "HH:MM"; the backend accepts that directly.
+      // Append ":00" only when seconds are missing so we never send "HH:MM:00:00"
+      // (which would be rejected as an invalid time).
+      const withSeconds = (t) => (t && t.length === 5 ? `${t}:00` : t);
       await api.updateCampusShift(token, c.id, {
-        shift_start: `${f.shift_start}:00`,
-        shift_end: `${f.shift_end}:00`,
+        shift_start: withSeconds(f.shift_start),
+        shift_end: withSeconds(f.shift_end),
       });
       setNotice(`${c.name} mesai saatleri güncellendi.`);
       await load();
