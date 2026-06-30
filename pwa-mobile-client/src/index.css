@@ -546,25 +546,17 @@ body {
   inset: 0;
   width: 100% !important;
   height: 100% !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   overflow: hidden;
   background: #000;
 }
-/* CRITICAL — keep the video at its NATURAL aspect ratio (full width, auto
-   height), centered. html5-qrcode builds its decode canvas from the video's
-   clientWidth/clientHeight (see foreverScan: widthRatio/heightRatio). If we
-   force both to fill the screen (height:100% + object-fit:cover), the canvas
-   aspect stops matching the landscape camera and the QR gets squashed so badly
-   it won't decode on iPhone — that was the "okumuyor" bug. Natural aspect keeps
-   the decode canvas undistorted so it reads. The trade-off is a cosmetic
-   letterbox band on portrait phones. Do NOT reintroduce height:100% /
-   object-fit:cover here without real-device decode testing. */
+/* Full-screen camera preview. Safe to use object-fit:cover now that WE decode
+   from the raw video frame (jsQR), so how the video is displayed no longer
+   affects what the decoder reads — unlike html5-qrcode, whose decode canvas was
+   derived from the displayed size. */
 .scanner__reader video {
   width: 100% !important;
-  height: auto !important;
-  max-height: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
 }
 /* html5-qrcode injects its own scan-region / shaded overlay (corner brackets,
    dark mask) whose position is computed from the raw video frame and drifts out
