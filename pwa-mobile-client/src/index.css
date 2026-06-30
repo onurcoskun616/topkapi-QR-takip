@@ -538,22 +538,16 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
-  overflow: hidden;
 }
-/* Make the camera video ALWAYS fill the reader, cropping any overflow. Some
-   phones report a camera aspect ratio that left object-fit:cover with a black
-   band over part of the screen, so we pin + center the video and use
-   min-width/min-height to cover — a technique that holds even where object-fit
-   on a <video> misbehaves (notably iOS Safari). */
+/* Keep this SIMPLE. The plain width/height:100% + object-fit:cover is the only
+   form that reliably RENDERS the camera across both Android and iOS. A fancier
+   pin/center + min-width/height "cover" technique fixed an iOS black band but
+   blanked the camera entirely on some Android devices — never reintroduce it
+   without testing on real Android + iOS hardware first. A residual black band
+   on a few iPhones is cosmetic; a blank camera is not. */
 .scanner__reader video {
-  position: absolute !important;
-  top: 50% !important;
-  left: 50% !important;
-  transform: translate(-50%, -50%) !important;
-  min-width: 100% !important;
-  min-height: 100% !important;
-  width: auto !important;
-  height: auto !important;
+  width: 100% !important;
+  height: 100% !important;
   object-fit: cover !important;
 }
 /* html5-qrcode injects its own scan-region / shaded overlay (corner brackets,
