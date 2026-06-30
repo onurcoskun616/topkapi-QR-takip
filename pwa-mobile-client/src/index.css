@@ -544,23 +544,27 @@ body {
 .scanner__reader {
   position: absolute;
   inset: 0;
-  /* !important: html5-qrcode sets an inline height on this container sized to
-     the camera's aspect ratio, which left a black band below the video on some
-     phones. Forcing full height (without touching the video's rendering) gives
-     the video the whole screen to cover. */
   width: 100% !important;
   height: 100% !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #000;
 }
-/* Keep the VIDEO rule SIMPLE. The plain width/height:100% + object-fit:cover is
-   the only form that reliably RENDERS the camera across both Android and iOS. A
-   fancier pin/center + min-width/height "cover" technique fixed an iOS band but
-   blanked the camera entirely on some Android devices — never reintroduce it
-   without testing on real Android + iOS hardware first. A blank camera is far
-   worse than a cosmetic band. */
+/* CRITICAL — keep the video at its NATURAL aspect ratio (full width, auto
+   height), centered. html5-qrcode builds its decode canvas from the video's
+   clientWidth/clientHeight (see foreverScan: widthRatio/heightRatio). If we
+   force both to fill the screen (height:100% + object-fit:cover), the canvas
+   aspect stops matching the landscape camera and the QR gets squashed so badly
+   it won't decode on iPhone — that was the "okumuyor" bug. Natural aspect keeps
+   the decode canvas undistorted so it reads. The trade-off is a cosmetic
+   letterbox band on portrait phones. Do NOT reintroduce height:100% /
+   object-fit:cover here without real-device decode testing. */
 .scanner__reader video {
   width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
+  height: auto !important;
+  max-height: 100% !important;
 }
 /* html5-qrcode injects its own scan-region / shaded overlay (corner brackets,
    dark mask) whose position is computed from the raw video frame and drifts out
