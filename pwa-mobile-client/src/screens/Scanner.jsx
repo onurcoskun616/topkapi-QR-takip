@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Html5Qrcode } from "html5-qrcode";
+import jsQR from "jsqr";
 import { useAuth } from "../auth";
 import {
   startWatching,
@@ -8,8 +8,6 @@ import {
   getLocationForScan,
 } from "../geolocation";
 import LeaveRequest from "./LeaveRequest";
-
-const READER_ID = "qr-reader";
 
 export default function Scanner() {
   const { user, scan, myStatus, notificationStatus, enableNotifications, disableNotifications } =
@@ -63,20 +61,28 @@ export default function Scanner() {
     refreshStatus();
   }, [refreshStatus]);
 
-  const scannerRef = useRef(null);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const loopRef = useRef(null);
   const lockRef = useRef(false);
 
-  const stopScanner = useCallback(async () => {
-    const s = scannerRef.current;
-    scannerRef.current = null;
-    if (s) {
-      try {
-        await s.stop();
-        await s.clear();
-      } catch {
-        /* already stopped */
-      }
+  const stopScanner = useCallback(() => {
+    if (loopRef.current) {
+      clearTimeout(loopRef.current);
+      loopRef.current = null;
     }
+    const v = videoRef.current;
+    if (v) {
+      try {
+        v.pause();
+      } catch {
+        /* ignore */
+      }
+      v.srcObject = null;
+    }
+    const s = streamRef.current;
+    streamRef.current = null;
+    if (s) s.getTracks().forEach((t) => t.stop());
   }, []);
 
   const handleDecoded = useCallback(
@@ -103,41 +109,79 @@ export default function Scanner() {
     [scan, stopScanner, refreshStatus]
   );
 
-  // Start the camera whenever we (re)enter the scanning phase — but not while
-  // the leave-request view is open (the camera must release then).
+  // Open the rear camera and decode QR frames OURSELVES with jsQR. We grab raw
+  // video frames onto an off-screen canvas and run jsQR on the pixels. This is
+  // far more reliable on iPhones (11/12/13/14) than html5-qrcode's bundled
+  // decoder, which failed to read on iOS while Android worked. Because decoding
+  // reads the raw frame, the on-screen video can fill the screen (object-fit:
+  // cover) without affecting what the decoder sees.
   useEffect(() => {
     if (mode !== "scan" || phase !== "scanning") return;
     let cancelled = false;
     lockRef.current = false;
     setCameraError(null);
 
-    const scanner = new Html5Qrcode(READER_ID, { verbose: false });
-    scannerRef.current = scanner;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
-    scanner
-      .start(
-        // Keep this MINIMAL. Do NOT add width/height resolution hints or
-        // experimentalFeatures.useBarCodeDetectorIfSupported here: on iOS Safari
-        // those make start() reject outright, so the camera never opens at all
-        // ("Kameraya erişilemedi") on every iPhone. The plain rear-camera
-        // request below is the known-good config that opens on iOS and Android.
-        { facingMode: "environment" },
-        // No qrbox: the library would otherwise draw its own scan-region UI
-        // (corner brackets) positioned from the raw video frame, which drifts
-        // out of alignment with our CSS-centered yellow frame once the video is
-        // letterboxed by object-fit: cover. Scanning the whole frame keeps a
-        // single, accurate guide (our .scanner__frame) and decodes anywhere.
-        { fps: 10 },
-        handleDecoded,
-        () => {} // per-frame decode failures are normal; ignore
-      )
-      .catch((err) => {
+    const tick = () => {
+      if (cancelled) return;
+      const v = videoRef.current;
+      if (v && v.readyState >= 2 && v.videoWidth > 0 && ctx) {
+        // Downscale big camera frames so jsQR stays fast; a QR still decodes
+        // well at this size.
+        const scale = Math.min(1, 720 / Math.max(v.videoWidth, v.videoHeight));
+        const w = Math.max(1, Math.round(v.videoWidth * scale));
+        const h = Math.max(1, Math.round(v.videoHeight * scale));
+        if (canvas.width !== w) canvas.width = w;
+        if (canvas.height !== h) canvas.height = h;
+        ctx.drawImage(v, 0, 0, w, h);
+        try {
+          const img = ctx.getImageData(0, 0, w, h);
+          const code = jsQR(img.data, w, h, { inversionAttempts: "dontInvert" });
+          if (code && code.data) {
+            handleDecoded(code.data);
+            return; // handleDecoded tears the camera down
+          }
+        } catch {
+          /* transient canvas read error; keep scanning */
+        }
+      }
+      loopRef.current = setTimeout(tick, 120);
+    };
+
+    (async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setCameraError("Kameraya erişilemedi. Lütfen tarayıcı izinlerini kontrol edin.");
+        return;
+      }
+      try {
+        // Keep the request MINIMAL (just the rear camera). Resolution hints make
+        // getUserMedia reject on some iPhones, blanking the camera entirely.
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        const v = videoRef.current;
+        if (!v) return;
+        v.setAttribute("playsinline", "true");
+        v.muted = true;
+        v.srcObject = stream;
+        await v.play().catch(() => {});
+        loopRef.current = setTimeout(tick, 200);
+      } catch {
         if (!cancelled) {
           setCameraError(
             "Kameraya erişilemedi. Lütfen tarayıcı izinlerini kontrol edin."
           );
         }
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -213,8 +257,10 @@ export default function Scanner() {
         </div>
       )}
 
-      {/* Camera viewport (html5-qrcode injects the video here) */}
-      <div id={READER_ID} className="scanner__reader" />
+      {/* Camera viewport: the rear-camera video; jsQR reads frames off-screen. */}
+      <div className="scanner__reader">
+        <video ref={videoRef} playsInline muted autoPlay />
+      </div>
 
       {phase === "scanning" && !cameraError && (
         <div className="scanner__hint">
