@@ -517,6 +517,14 @@ body {
 .scanner {
   position: relative;
   background: #000;
+  /* A DEFINITE height (not just min-height) so the absolutely-positioned reader
+     and the camera <video>'s height:100% actually resolve — html5-qrcode gives
+     the video a width but no height, so without this the video keeps its aspect
+     ratio and leaves a black band below it. The scanner has no scrollable
+     content, so pinning it to the viewport is safe here (other screens keep
+     min-height). */
+  height: 100vh;
+  height: 100dvh;
 }
 .scanner__header {
   position: absolute;
