@@ -5,9 +5,46 @@ singletons), so each test that needs an isolated SQLite database re-imports
 the whole ``app`` package after setting environment variables — mirroring how
 the app is actually configured (env vars read once at process start).
 """
+import os
+import sqlite3
 import sys
 
 import pytest
+
+
+def backdate_users_created_at(iso: str = "2000-01-01 00:00:00") -> None:
+    """Set every user's created_at into the far past for the current test DB.
+
+    The go-live rule stops counting anyone absent before their registration
+    (created_at) date. Test staff are created "now" but many tests assert
+    absences over fixed past dates, so we backdate accounts to keep those tests
+    meaningful. Tests that specifically cover the go-live/registration rule don't
+    call this. Writes directly to the SQLite file (idle between requests)."""
+    url = os.environ.get("DATABASE_URL", "")
+    if "sqlite" not in url:
+        return
+    path = url.split("///")[-1]
+    con = sqlite3.connect(path, timeout=5)
+    try:
+        con.execute("UPDATE users SET created_at = ?", (iso,))
+        con.commit()
+    finally:
+        con.close()
+
+
+def set_user_created_at(user_id: int, iso: str) -> None:
+    """Set one user's created_at (their 'registration date') for the current
+    test DB — used to exercise the go-live tracking rule."""
+    url = os.environ.get("DATABASE_URL", "")
+    if "sqlite" not in url:
+        return
+    path = url.split("///")[-1]
+    con = sqlite3.connect(path, timeout=5)
+    try:
+        con.execute("UPDATE users SET created_at = ? WHERE id = ?", (iso, user_id))
+        con.commit()
+    finally:
+        con.close()
 
 
 @pytest.fixture()
@@ -21,6 +58,10 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("BOOTSTRAP_ADMIN_EMAIL", "hq@test.com")
     monkeypatch.setenv("BOOTSTRAP_ADMIN_PASSWORD", "HqPassword123!")
     monkeypatch.setenv("ATTENDANCE_TIMEZONE", "Europe/Istanbul")
+    # Tests exercise absence/late reports over fixed past dates; keep go-live in
+    # the far past so the go-live tracking clip is neutral for them. (Tests that
+    # specifically cover the go-live rule set their own value / backdate users.)
+    monkeypatch.setenv("ATTENDANCE_GO_LIVE_DATE", "2000-01-01")
 
     for mod in list(sys.modules):
         if mod == "app" or mod.startswith("app."):
@@ -102,6 +143,10 @@ def seeded(client):
     staff_id = r.json()["user"]["id"]
 
     client.post(f"/api/staff/{staff_id}/approve", headers=dir_a_headers)
+
+    # Backdate accounts so the go-live tracking rule doesn't clip the fixed past
+    # dates the absence/late/report tests use.
+    backdate_users_created_at()
 
     return {
         "hq_headers": hq_headers,

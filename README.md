@@ -110,6 +110,13 @@ Backend için **FastAPI** seçildi: async I/O, otomatik OpenAPI dokümantasyonu
     tanımlı değilse özellik tamamen kapalıdır ve uygulama aynen çalışır.
     Anahtar üretimi: `python -m app.tools.vapid_keys`. (iOS'ta yalnızca **Ana
     Ekrana Eklenmiş** PWA'da çalışır; Android Chrome'da tarayıcıda da çalışır.)
+17. **Yoklama başlangıcı (go-live / kayıt tarihi):** Hiç kimse, **kayıt (hesap
+    oluşturma) tarihinden** veya yapılandırılan **go-live tarihinden**
+    (`ATTENDANCE_GO_LIVE_DATE`, varsayılan 1 Temmuz 2026) — hangisi sonraysa —
+    **önceki günler için devamsız sayılmaz.** Böylece mevcut personel go-live'dan,
+    sonradan kayıt olan personel kendi kayıt gününden itibaren takip edilir.
+    Canlıya geçmeden önceki test giriş/çıkışları `python -m
+    app.scripts.reset_attendance --confirm` ile (hesaplara dokunmadan) silinebilir.
 
 ## Hızlı başlangıç (Docker)
 

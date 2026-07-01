@@ -33,6 +33,7 @@ from ..models import (
     User,
     UserRole,
     UserStatus,
+    ensure_aware,
 )
 from ..schemas import (
     AbsenceDayEntry,
@@ -108,6 +109,23 @@ async def _load_holidays(
     return national, by_campus
 
 
+def _tracking_start(staff: User) -> date:
+    """The first day this staff member is counted for attendance: the later of
+    the global go-live date and their own registration (account-creation) date.
+
+    Days before this are never expected and never absences — an existing staff
+    member isn't penalised for the period before go-live, and someone who
+    registers later isn't penalised for the days before they joined.
+    """
+    go_live = settings.go_live_date
+    created = staff.created_at
+    if created is None:
+        return go_live
+    tz = ZoneInfo(settings.attendance_timezone)
+    created_local = ensure_aware(created).astimezone(tz).date()
+    return max(created_local, go_live)
+
+
 def _expected_days_for_staff(
     staff: User,
     all_days: list[date],
@@ -116,10 +134,16 @@ def _expected_days_for_staff(
     holidays_by_campus: dict[int, set[date]],
 ) -> list[date]:
     """The days in the range a staff member is actually expected to work:
-    their per-person working weekdays, minus any applicable holiday."""
+    their per-person working weekdays, minus any applicable holiday, and never
+    before their attendance tracking start (go-live / registration date)."""
     working = effective_working_days(staff.working_days, exclude_weekends)
     closed = national_holidays | holidays_by_campus.get(staff.campus_id, set())
-    return [d for d in all_days if d.isoweekday() in working and d not in closed]
+    start = _tracking_start(staff)
+    return [
+        d
+        for d in all_days
+        if d >= start and d.isoweekday() in working and d not in closed
+    ]
 
 
 async def _scoped_active_staff(
