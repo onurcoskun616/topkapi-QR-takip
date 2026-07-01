@@ -574,6 +574,33 @@ def test_risk_scoped_to_director_campus(client, seeded):
 # --------------------------------------------------------------------------- #
 # Reports narrowed to a single person via user_id (per-person reporting)
 # --------------------------------------------------------------------------- #
+def test_today_absentees_lists_expected_then_drops_after_scan(client, seeded):
+    # exclude_weekends=false so "today" is always a working day for the test,
+    # regardless of which weekday the suite runs on.
+    r = client.get(
+        "/api/reports/today-absentees",
+        headers=seeded["dir_a_headers"],
+        params={"exclude_weekends": "false"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert seeded["staff_id"] in {e["user_id"] for e in body["entries"]}
+    assert body["count"] >= 1
+
+    # After a real scan today, the staff member is no longer "not here".
+    qr_token = client.get("/api/qr/token").json()["token"]
+    assert (
+        client.post("/api/scan", headers=seeded["staff_headers"], json={"qr_token": qr_token}).status_code
+        == 200
+    )
+    after = client.get(
+        "/api/reports/today-absentees",
+        headers=seeded["dir_a_headers"],
+        params={"exclude_weekends": "false"},
+    ).json()
+    assert seeded["staff_id"] not in {e["user_id"] for e in after["entries"]}
+
+
 def _bulk_import_one(client, seeded, full_name, phone):
     r = client.post(
         "/api/staff/bulk",

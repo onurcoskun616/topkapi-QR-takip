@@ -434,6 +434,24 @@ class KioskAnnouncementsResponse(BaseModel):
 # --------------------------------------------------------------------------- #
 # Reports — late / early-leave rankings, absence detail + aggregate stats
 # --------------------------------------------------------------------------- #
+class TodayAbsenteeEntry(BaseModel):
+    """A staff member expected today who has not scanned in and is not on an
+    active leave — i.e. not here (yet) today."""
+
+    user_id: int
+    full_name: str
+    job_title: str | None = None
+    branch: str | None = None
+    campus_name: str | None = None
+    phone: str | None = None
+
+
+class TodayAbsenteesResponse(BaseModel):
+    date: date
+    count: int
+    entries: list[TodayAbsenteeEntry]
+
+
 class LateRankingEntry(BaseModel):
     user_id: int
     full_name: str

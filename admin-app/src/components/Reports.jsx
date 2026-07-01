@@ -224,6 +224,8 @@ export default function Reports({ isHq }) {
   const [monthly, setMonthly] = useState([]);
   const [monthlyBusy, setMonthlyBusy] = useState(false);
 
+  const [todayAbs, setTodayAbs] = useState(null);
+
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -259,8 +261,9 @@ export default function Reports({ isHq }) {
     setBusy(true);
     setError(null);
     try {
-      const [lateRows, earlyRows, lateListRows, earlyListRows, summaryRes, detailRows, trendRes, riskRes] =
+      const [todayAbsRes, lateRows, earlyRows, lateListRows, earlyListRows, summaryRes, detailRows, trendRes, riskRes] =
         await Promise.all([
+          api.todayAbsentees(token, { campusId: isHq ? campusId || undefined : undefined, excludeWeekends }),
           api.lateRanking(token, filters),
           api.earlyLeaveRanking(token, filters),
           api.lateDetail(token, filters),
@@ -275,6 +278,7 @@ export default function Reports({ isHq }) {
             unresolvedThreshold,
           }),
         ]);
+      setTodayAbs(todayAbsRes);
       setLate(lateRows);
       setEarly(earlyRows);
       setLateList(lateListRows);
@@ -369,6 +373,45 @@ export default function Reports({ isHq }) {
 
   return (
     <div className="stack">
+      <section className="card">
+        <h2 className="card__title">
+          Bugün Gelmeyenler{todayAbs ? ` (${todayAbs.count})` : ""}
+        </h2>
+        <p className="muted small">
+          Bugün gelmesi beklenen ama henüz giriş yapmamış ve izinli olmayan personel.
+          Gün içinde kişiler giriş yaptıkça liste kısalır. (Kayıt/go-live tarihinden
+          önce takip edilmeyenler ve çalışma günü bugün olmayanlar listelenmez.)
+        </p>
+        {!todayAbs ? (
+          <p className="muted">Yükleniyor…</p>
+        ) : todayAbs.count === 0 ? (
+          <p className="notice">Bugün beklenen herkes giriş yaptı. 🎉</p>
+        ) : (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Ad Soyad</th>
+                  <th>Görev / Branş</th>
+                  {isHq && <th>Kampüs</th>}
+                  <th>Telefon</th>
+                </tr>
+              </thead>
+              <tbody>
+                {todayAbs.entries.map((r) => (
+                  <tr key={r.user_id}>
+                    <td><strong>{r.full_name}</strong></td>
+                    <td className="muted small">{roleLabel(r)}</td>
+                    {isHq && <td className="muted small">{r.campus_name || "—"}</td>}
+                    <td className="muted small">{r.phone || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       <section className="card">
         <div className="filters">
           <div className="actions">

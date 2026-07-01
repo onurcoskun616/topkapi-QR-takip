@@ -54,6 +54,8 @@ from ..schemas import (
     MonthlyHoursResponse,
     RiskReportResponse,
     RiskStaffEntry,
+    TodayAbsenteeEntry,
+    TodayAbsenteesResponse,
     UnresolvedReminderResponse,
 )
 from ..scoping import scope_campus_id
@@ -203,6 +205,65 @@ async def _campus_names_map(db: AsyncSession) -> dict[int, str]:
 async def _campus_shift_map(db: AsyncSession) -> dict[int, Campus]:
     rows = await db.execute(select(Campus))
     return {c.id: c for c in rows.scalars().all()}
+
+
+@router.get("/today-absentees", response_model=TodayAbsenteesResponse)
+async def today_absentees(
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+    campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    exclude_weekends: bool = True,
+):
+    """Who is expected today but not here yet: active staff whose working
+    schedule includes today (and who are past their tracking start), with no
+    scan today and no active leave covering today. This is the daily "who hasn't
+    come in" list. During the day it naturally shrinks as people scan in."""
+    tz = ZoneInfo(settings.attendance_timezone)
+    today = datetime.now(timezone.utc).astimezone(tz).date()
+    staff = await _scoped_active_staff(db, manager, campus_id, None)
+    if not staff:
+        return TodayAbsenteesResponse(date=today, count=0, entries=[])
+
+    staff_ids = [s.id for s in staff]
+    logs = await _logs_for_staff(db, staff_ids, today, today)
+    present = {log.user_id for log in logs}  # any scan today = here
+
+    leave_rows = await db.execute(
+        select(LeaveRecord.user_id).where(
+            LeaveRecord.user_id.in_(staff_ids),
+            LeaveRecord.status == LeaveStatus.active,
+            LeaveRecord.start_date <= today,
+            LeaveRecord.end_date >= today,
+        )
+    )
+    on_leave = {uid for (uid,) in leave_rows.all()}
+
+    national_holidays, holidays_by_campus = await _load_holidays(db, today, today)
+    campus_names = await _campus_names_map(db)
+
+    entries: list[TodayAbsenteeEntry] = []
+    for s in staff:
+        # Empty when today isn't a working day for them, is a holiday, or is
+        # before their go-live/registration tracking start.
+        if not _expected_days_for_staff(
+            s, [today], exclude_weekends, national_holidays, holidays_by_campus
+        ):
+            continue
+        if s.id in present or s.id in on_leave:
+            continue
+        entries.append(
+            TodayAbsenteeEntry(
+                user_id=s.id,
+                full_name=s.full_name,
+                job_title=s.job_title,
+                branch=s.branch,
+                campus_name=campus_names.get(s.campus_id) if s.campus_id else None,
+                phone=s.phone,
+            )
+        )
+
+    entries.sort(key=lambda e: ((e.campus_name or ""), e.full_name))
+    return TodayAbsenteesResponse(date=today, count=len(entries), entries=entries)
 
 
 @router.get("/late", response_model=list[LateRankingEntry])
