@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth";
 import { api } from "../api";
 
@@ -77,6 +77,11 @@ export default function Staff({ isHq }) {
   const [workingSel, setWorkingSel] = useState(DEFAULT_WORKING);
   const [workingBusy, setWorkingBusy] = useState(false);
   const [workingError, setWorkingError] = useState(null);
+
+  const [editForId, setEditForId] = useState(null);
+  const [editForm, setEditForm] = useState({ full_name: "", job_title: "", branch: "", birth_date: "" });
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState(null);
 
   const [showBulk, setShowBulk] = useState(false);
   const [bulkText, setBulkText] = useState("");
@@ -179,6 +184,49 @@ export default function Staff({ isHq }) {
     }
   };
 
+  const openEdit = (u) => {
+    setEditForId(u.id);
+    setEditError(null);
+    setEditForm({
+      full_name: u.full_name || "",
+      job_title: u.job_title || "",
+      branch: u.branch || "",
+      birth_date: u.birth_date || "",
+    });
+  };
+
+  const closeEdit = () => {
+    setEditForId(null);
+    setEditError(null);
+  };
+
+  const submitEdit = async (e, u) => {
+    e.preventDefault();
+    if (!editForm.full_name.trim() || editForm.full_name.trim().length < 2) {
+      setEditError("Ad soyad en az 2 karakter olmalı.");
+      return;
+    }
+    setEditBusy(true);
+    setEditError(null);
+    try {
+      // Only safe profile fields — phone / TC / device stay locked (identity),
+      // so correcting a name/typo never opens a security hole.
+      await api.updateStaff(token, u.id, {
+        full_name: editForm.full_name.trim(),
+        job_title: editForm.job_title.trim() || undefined,
+        branch: editForm.branch.trim() || undefined,
+        birth_date: editForm.birth_date || undefined,
+      });
+      setNotice(`${editForm.full_name.trim()} bilgileri güncellendi.`);
+      closeEdit();
+      await load();
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
   const openWorking = (u) => {
     setWorkingForId(u.id);
     setWorkingError(null);
@@ -273,7 +321,7 @@ export default function Staff({ isHq }) {
 
   const validCount = bulkRows.filter((r) => !r._error).length;
 
-  const WorkingRow = ({ u }) => (
+  const renderWorkingRow = (u) => (
     <tr className="manual-row">
       <td colSpan={isHq ? 6 : 5}>
         <div className="manual-form">
@@ -319,7 +367,65 @@ export default function Staff({ isHq }) {
     </tr>
   );
 
-  const ManualRow = ({ u }) => (
+  const renderEditRow = (u) => (
+    <tr className="manual-row">
+      <td colSpan={isHq ? 6 : 5}>
+        <form className="manual-form" onSubmit={(e) => submitEdit(e, u)}>
+          <span className="manual-form__title">
+            <strong>{u.full_name}</strong> bilgilerini düzelt (telefon, TC ve cihaz
+            güvenlik için değiştirilemez)
+          </span>
+          <label className="field field--inline">
+            <span>Ad Soyad</span>
+            <input
+              type="text"
+              required
+              maxLength={120}
+              value={editForm.full_name}
+              onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+            />
+          </label>
+          <label className="field field--inline">
+            <span>Görev</span>
+            <input
+              type="text"
+              maxLength={80}
+              value={editForm.job_title}
+              onChange={(e) => setEditForm({ ...editForm, job_title: e.target.value })}
+            />
+          </label>
+          <label className="field field--inline">
+            <span>Branş</span>
+            <input
+              type="text"
+              maxLength={80}
+              value={editForm.branch}
+              onChange={(e) => setEditForm({ ...editForm, branch: e.target.value })}
+            />
+          </label>
+          <label className="field field--inline">
+            <span>Doğum Tarihi</span>
+            <input
+              type="date"
+              value={editForm.birth_date}
+              onChange={(e) => setEditForm({ ...editForm, birth_date: e.target.value })}
+            />
+          </label>
+          <div className="actions">
+            <button className="btn btn--primary btn--sm" disabled={editBusy} type="submit">
+              {editBusy ? "Kaydediliyor…" : "Kaydet"}
+            </button>
+            <button className="btn btn--ghost btn--sm" type="button" onClick={closeEdit}>
+              Vazgeç
+            </button>
+          </div>
+          {editError && <p className="error">{editError}</p>}
+        </form>
+      </td>
+    </tr>
+  );
+
+  const renderManualRow = (u) => (
     <tr className="manual-row">
       <td colSpan={isHq ? 6 : 5}>
         <form className="manual-form" onSubmit={(e) => submitManual(e, u)}>
@@ -378,8 +484,8 @@ export default function Staff({ isHq }) {
     </tr>
   );
 
-  const Row = ({ u }) => (
-    <>
+  const renderRow = (u) => (
+    <Fragment key={u.id}>
       <tr>
         <td>
           <strong>{u.full_name}</strong>
@@ -475,11 +581,20 @@ export default function Staff({ isHq }) {
               Yeniden Aktifleştir
             </button>
           )}
+          <button
+            className="btn btn--ghost btn--sm"
+            disabled={busyId === u.id}
+            onClick={() => (editForId === u.id ? closeEdit() : openEdit(u))}
+            title="Ad soyad, görev, branş, doğum tarihi düzeltir (telefon/TC/cihaz değişmez)"
+          >
+            Düzenle
+          </button>
         </td>
       </tr>
-      {manualForId === u.id && <ManualRow u={u} />}
-      {workingForId === u.id && <WorkingRow u={u} />}
-    </>
+      {editForId === u.id && renderEditRow(u)}
+      {manualForId === u.id && renderManualRow(u)}
+      {workingForId === u.id && renderWorkingRow(u)}
+    </Fragment>
   );
 
   const cols = isHq ? 6 : 5;
@@ -643,9 +758,7 @@ export default function Staff({ isHq }) {
                 </tr>
               </thead>
               <tbody>
-                {pending.map((u) => (
-                  <Row key={u.id} u={u} />
-                ))}
+                {pending.map((u) => renderRow(u))}
               </tbody>
             </table>
           </div>
@@ -674,7 +787,7 @@ export default function Staff({ isHq }) {
                   </td>
                 </tr>
               ) : (
-                others.map((u) => <Row key={u.id} u={u} />)
+                others.map((u) => renderRow(u))
               )}
             </tbody>
           </table>

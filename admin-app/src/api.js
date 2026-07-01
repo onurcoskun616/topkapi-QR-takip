@@ -291,6 +291,16 @@ export const api = {
       { token }
     ),
 
+  // Who is expected today but hasn't scanned in yet (and isn't on leave).
+  todayAbsentees: (token, { campusId, excludeWeekends } = {}) =>
+    request(
+      `/api/reports/today-absentees${qs({
+        campus_id: campusId,
+        exclude_weekends: excludeWeekends,
+      })}`,
+      { token }
+    ),
+
   // --- reports: late/early-leave rankings, absence detail + summary -------
   lateRanking: (token, { startDate, endDate, campusId, userId, thresholdMinutes, excludeWeekends } = {}) =>
     request(
