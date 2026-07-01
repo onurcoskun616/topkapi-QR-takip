@@ -11,6 +11,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from conftest import backdate_users_created_at, set_user_created_at
+
 
 def _today_local():
     return datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Istanbul")).date()
@@ -457,6 +459,30 @@ def test_absence_detail_flags_unresolved_when_no_leave_covers(client, seeded):
     assert all(row["status"] == "unresolved" for row in rows)
 
 
+def test_absence_not_counted_before_registration_date(client, seeded):
+    """Go-live rule: a staff member is never absent for days before their
+    registration (account-creation) date — only from that day onward."""
+    # Pretend this person registered mid-June.
+    set_user_created_at(seeded["staff_id"], "2026-06-15 00:00:00")
+
+    # A range entirely BEFORE the registration date → nothing is expected, so no
+    # unresolved absences.
+    before = client.get(
+        "/api/reports/absence-summary",
+        headers=seeded["dir_a_headers"],
+        params={"start_date": "2026-06-01", "end_date": "2026-06-12", "exclude_weekends": "false"},
+    ).json()
+    assert before["unresolved_count"] == 0
+
+    # A range AFTER registration with no scans → those days ARE unresolved.
+    after = client.get(
+        "/api/reports/absence-summary",
+        headers=seeded["dir_a_headers"],
+        params={"start_date": "2026-06-16", "end_date": "2026-06-20", "exclude_weekends": "false"},
+    ).json()
+    assert after["unresolved_count"] > 0
+
+
 def test_absence_summary_counts_unresolved(client, seeded):
     r = client.get(
         "/api/reports/absence-summary",
@@ -556,6 +582,9 @@ def _bulk_import_one(client, seeded, full_name, phone):
     )
     assert r.status_code == 201
     staff = client.get("/api/staff", headers=seeded["dir_a_headers"]).json()
+    # Backdate so the go-live tracking rule doesn't clip these tests' fixed past
+    # report dates (the imported account is otherwise created "now").
+    backdate_users_created_at()
     return next(u["id"] for u in staff if u["full_name"] == full_name)
 
 
@@ -639,10 +668,12 @@ def test_logs_range_filter_includes_both_sources(client, seeded):
     )
     assert r.status_code == 201
 
+    # The QR scan is stamped "today"; end the range at today so it's included
+    # regardless of when the suite runs (the manual entry is the 2026-06-10 row).
     r = client.get(
         "/api/logs",
         headers=seeded["dir_a_headers"],
-        params={"start_date": "2026-06-01", "end_date": "2026-06-30"},
+        params={"start_date": "2026-06-01", "end_date": _today_local().isoformat()},
     )
     assert r.status_code == 200
     sources = {row["source"] for row in r.json()}

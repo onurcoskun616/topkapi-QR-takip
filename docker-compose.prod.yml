@@ -38,6 +38,9 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-365}
       ATTENDANCE_TIMEZONE: ${ATTENDANCE_TIMEZONE:-Europe/Istanbul}
+      # Nobody is counted absent before this date or before their own
+      # registration date (whichever is later). Default: go-live on 1 July 2026.
+      ATTENDANCE_GO_LIVE_DATE: ${ATTENDANCE_GO_LIVE_DATE:-2026-07-01}
       CORS_ORIGINS: "https://${KIOSK_DOMAIN},https://${PANEL_DOMAIN},https://${APP_DOMAIN}"
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}

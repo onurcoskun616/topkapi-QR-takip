@@ -3,6 +3,7 @@
 Pydantic-settings validates and centralises every tunable value so the rest of
 the codebase never reads ``os.environ`` directly.
 """
+from datetime import date
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -44,6 +45,13 @@ class Settings(BaseSettings):
     # Day-boundary timezone for attendance toggling (storage stays UTC).
     attendance_timezone: str = "Europe/Istanbul"
 
+    # Attendance go-live date (ISO yyyy-mm-dd). Nobody is counted absent before
+    # this date, and nobody is counted absent before their own registration date
+    # either. Effective tracking start per person = max(registration date, this).
+    # So existing staff start being tracked on go-live; staff who register later
+    # start on their registration day — earlier days are never absences.
+    attendance_go_live_date: str = "2026-07-01"
+
     # Bootstrap admin
     bootstrap_admin_email: str | None = "admin@topkapi.k12.tr"
     bootstrap_admin_password: str | None = "ChangeThisAdminPassword123!"
@@ -63,6 +71,15 @@ class Settings(BaseSettings):
     vapid_public_key: str = ""
     vapid_private_key: str = ""
     vapid_subject: str = "mailto:topkapiokullariai@gmail.com"
+
+    @property
+    def go_live_date(self) -> date:
+        """Parsed ``attendance_go_live_date``; falls back to 2026-07-01 if the
+        configured value isn't a valid ISO date."""
+        try:
+            return date.fromisoformat(self.attendance_go_live_date.strip())
+        except (ValueError, AttributeError):
+            return date(2026, 7, 1)
 
     @property
     def push_enabled(self) -> bool:
