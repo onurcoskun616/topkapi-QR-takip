@@ -28,6 +28,8 @@ class CampusResponse(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     geofence_radius_m: int | None = None
+    # NULL (older rows) is treated as enabled; only False means paused.
+    geofence_enabled: bool | None = None
 
 
 class CampusShiftUpdate(BaseModel):
@@ -47,6 +49,9 @@ class CampusLocationUpdate(BaseModel):
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     geofence_radius_m: int = Field(default=500, ge=50, le=20000)
+    # Optional on/off that keeps the saved coordinates: send false to pause the
+    # location check, true to resume. Omitted → unchanged (kept enabled).
+    geofence_enabled: bool | None = None
 
 
 # --------------------------------------------------------------------------- #

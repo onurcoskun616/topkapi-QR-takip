@@ -158,6 +158,25 @@ export default function Campuses() {
     }
   };
 
+  const toggleGeoEnabled = async (c, enabled) => {
+    setGeoBusyId(c.id);
+    setGeoError(null);
+    setGeoNotice(null);
+    try {
+      await api.setCampusGeofenceEnabled(token, c.id, enabled);
+      setGeoNotice(
+        enabled
+          ? `${c.name} konum doğrulaması açıldı.`
+          : `${c.name} konum doğrulaması duraklatıldı (konum korundu).`
+      );
+      await load();
+    } catch (e) {
+      setGeoError(e.message);
+    } finally {
+      setGeoBusyId(null);
+    }
+  };
+
   const clearGeo = async (c) => {
     if (!window.confirm(`${c.name} için konum doğrulaması kapatılsın mı?`)) return;
     setGeoBusyId(c.id);
@@ -289,7 +308,9 @@ export default function Campuses() {
             <tbody>
               {campuses.map((c) => {
                 const g = geoFor(c);
-                const active = c.latitude != null && c.longitude != null;
+                const hasCoords = c.latitude != null && c.longitude != null;
+                const enabled = c.geofence_enabled !== false;
+                const active = hasCoords && enabled;
                 return (
                   <tr key={c.id}>
                     <td>{c.name}</td>
@@ -326,6 +347,8 @@ export default function Campuses() {
                     <td>
                       {active ? (
                         <span className="badge badge--in">Açık</span>
+                      ) : hasCoords ? (
+                        <span className="badge badge--auto">Duraklatıldı</span>
                       ) : (
                         <span className="badge badge--out">Kapalı</span>
                       )}
@@ -345,13 +368,35 @@ export default function Campuses() {
                       >
                         {geoBusyId === c.id ? "Kaydediliyor…" : "Kaydet"}
                       </button>
-                      {active && (
+                      {hasCoords && (
+                        enabled ? (
+                          <button
+                            className="btn btn--warn btn--sm"
+                            disabled={geoBusyId === c.id}
+                            onClick={() => toggleGeoEnabled(c, false)}
+                            title="Konumu silmeden kontrolü duraklatır"
+                          >
+                            Duraklat
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn--primary btn--sm"
+                            disabled={geoBusyId === c.id}
+                            onClick={() => toggleGeoEnabled(c, true)}
+                            title="Kayıtlı konumla kontrolü yeniden açar"
+                          >
+                            Aç
+                          </button>
+                        )
+                      )}
+                      {hasCoords && (
                         <button
-                          className="btn btn--warn btn--sm"
+                          className="btn btn--ghost btn--sm"
                           disabled={geoBusyId === c.id}
                           onClick={() => clearGeo(c)}
+                          title="Kayıtlı konumu tamamen siler"
                         >
-                          Kapat
+                          Konumu Sil
                         </button>
                       )}
                     </td>

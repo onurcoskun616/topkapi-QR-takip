@@ -91,6 +91,13 @@ export const api = {
   updateCampusLocation: (token, campusId, payload) =>
     request(`/api/campuses/${campusId}/location`, { method: "PATCH", token, body: payload }),
 
+  // Pause/resume the location check WITHOUT clearing the saved coordinates.
+  setCampusGeofenceEnabled: (token, campusId, enabled) =>
+    request(`/api/campuses/${campusId}/geofence-enabled${qs({ enabled })}`, {
+      method: "PATCH",
+      token,
+    }),
+
   // --- staff management (director: own campus, hq: all/filter) ------------
   listStaff: (token, { status, campusId } = {}) =>
     request(`/api/staff${qs({ status, campus_id: campusId })}`, { token }),

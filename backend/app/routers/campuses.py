@@ -65,6 +65,27 @@ async def update_campus_location(
     campus.latitude = payload.latitude
     campus.longitude = payload.longitude
     campus.geofence_radius_m = payload.geofence_radius_m
+    if payload.geofence_enabled is not None:
+        campus.geofence_enabled = payload.geofence_enabled
+    await db.commit()
+    await db.refresh(campus)
+    return campus
+
+
+@router.patch(
+    "/{campus_id}/geofence-enabled",
+    response_model=CampusResponse,
+    dependencies=[Depends(get_current_hq)],
+)
+async def set_campus_geofence_enabled(
+    campus_id: int, enabled: bool, db: AsyncSession = Depends(get_db)
+):
+    """hq-only: pause/resume a campus' location check WITHOUT clearing its saved
+    coordinates, so it can be toggled back on with one click."""
+    campus = await db.get(Campus, campus_id)
+    if campus is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kampüs bulunamadı.")
+    campus.geofence_enabled = enabled
     await db.commit()
     await db.refresh(campus)
     return campus

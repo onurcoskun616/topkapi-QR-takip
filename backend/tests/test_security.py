@@ -237,6 +237,51 @@ def test_scan_without_location_blocked_when_geofenced(client, seeded):
     assert "konum" in r.json()["detail"].lower()
 
 
+def test_geofence_pause_and_resume_keeps_coordinates(client, seeded):
+    campus = seeded["campus_a"]
+    _set_geofence(client, seeded, campus, 41.0, 29.0)
+
+    # Active → a scan without location is blocked.
+    token = _qr_token(client, campus["id"])
+    r = client.post("/api/scan", headers=seeded["staff_headers"], json={"qr_token": token})
+    assert r.status_code == 400
+
+    # Pause from the panel — coordinates are preserved.
+    r = client.patch(
+        f"/api/campuses/{campus['id']}/geofence-enabled",
+        headers=seeded["hq_headers"],
+        params={"enabled": "false"},
+    )
+    assert r.status_code == 200
+    assert r.json()["geofence_enabled"] is False
+    assert r.json()["latitude"] == 41.0
+
+    # Paused → a scan without location now succeeds.
+    token = _qr_token(client, campus["id"])
+    r = client.post("/api/scan", headers=seeded["staff_headers"], json={"qr_token": token})
+    assert r.status_code == 200
+
+    # Resume → location required again (coordinates were kept).
+    r = client.patch(
+        f"/api/campuses/{campus['id']}/geofence-enabled",
+        headers=seeded["hq_headers"],
+        params={"enabled": "true"},
+    )
+    assert r.json()["geofence_enabled"] is True
+    token = _qr_token(client, campus["id"])
+    r = client.post("/api/scan", headers=seeded["staff_headers"], json={"qr_token": token})
+    assert r.status_code == 400
+
+
+def test_geofence_enable_toggle_is_hq_only(client, seeded):
+    r = client.patch(
+        f"/api/campuses/{seeded['campus_a']['id']}/geofence-enabled",
+        headers=seeded["dir_a_headers"],
+        params={"enabled": "false"},
+    )
+    assert r.status_code == 403
+
+
 def test_scan_without_geofence_ignores_location(client, seeded):
     # No coordinates configured → location is optional and the scan succeeds.
     token = _qr_token(client, seeded["campus_a"]["id"])
