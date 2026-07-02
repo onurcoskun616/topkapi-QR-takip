@@ -143,10 +143,16 @@ def _expected_days_for_staff(
     working = effective_working_days(staff.working_days, exclude_weekends)
     closed = national_holidays | holidays_by_campus.get(staff.campus_id, set())
     start = _tracking_start(staff)
+    # Never expect a day that hasn't happened yet: future days are neither
+    # planned/expected nor absences. So for the current month "planned days"
+    # grow as the month progresses (on 2 July it's 2, not the whole month), and
+    # a range that runs into the future only counts up to today.
+    tz = ZoneInfo(settings.attendance_timezone)
+    today = datetime.now(timezone.utc).astimezone(tz).date()
     return [
         d
         for d in all_days
-        if d >= start and d.isoweekday() in working and d not in closed
+        if start <= d <= today and d.isoweekday() in working and d not in closed
     ]
 
 
