@@ -40,6 +40,7 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("campuses", "latitude", "DOUBLE PRECISION"),
     ("campuses", "longitude", "DOUBLE PRECISION"),
     ("campuses", "geofence_radius_m", "INTEGER"),
+    ("campuses", "geofence_enabled", "BOOLEAN"),
     ("announcements", "video_data", "BYTEA"),
     ("announcements", "video_mime", "VARCHAR(80)"),
     ("attendance_logs", "kiosk_id", "VARCHAR(64)"),

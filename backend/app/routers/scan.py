@@ -91,7 +91,14 @@ async def scan(
     # standing at the kiosk could still use.
     if current.campus_id is not None:
         campus = await db.get(Campus, current.campus_id)
-        if campus and campus.latitude is not None and campus.longitude is not None:
+        # Active only when coordinates are set AND the check isn't paused from
+        # the panel (geofence_enabled False). NULL enabled = on (backward compat).
+        if (
+            campus
+            and campus.latitude is not None
+            and campus.longitude is not None
+            and campus.geofence_enabled is not False
+        ):
             if payload.latitude is None or payload.longitude is None:
                 # Location required (configured policy): no fix → no scan.
                 raise HTTPException(

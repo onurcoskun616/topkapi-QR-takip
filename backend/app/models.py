@@ -110,6 +110,13 @@ class Campus(Base):
     geofence_radius_m: Mapped[int | None] = mapped_column(
         Integer, nullable=True, default=500
     )
+    # Master on/off for this campus' location check, independent of whether
+    # coordinates are set — so a manager can pause/resume geofencing from the
+    # panel without re-entering coordinates. NULL (older rows) counts as ON for
+    # backward compatibility; only an explicit False turns it off.
+    geofence_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
