@@ -291,6 +291,20 @@ export const api = {
       { token }
     ),
 
+  // Clickable summary for the range: total staff + on-time/late/absent/on-leave
+  // buckets, each with the people behind it.
+  reportSummary: (token, { startDate, endDate, campusId, thresholdMinutes, excludeWeekends } = {}) =>
+    request(
+      `/api/reports/summary${qs({
+        start_date: startDate,
+        end_date: endDate,
+        campus_id: campusId,
+        threshold_minutes: thresholdMinutes,
+        exclude_weekends: excludeWeekends,
+      })}`,
+      { token }
+    ),
+
   // Who is expected today but hasn't scanned in yet (and isn't on leave).
   todayAbsentees: (token, { campusId, excludeWeekends } = {}) =>
     request(

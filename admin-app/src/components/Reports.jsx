@@ -199,7 +199,7 @@ export default function Reports({ isHq }) {
   const [campusId, setCampusId] = useState("");
   const [staffList, setStaffList] = useState([]);
   const [userId, setUserId] = useState("");
-  const [range, setRange] = useState(presetRange("month"));
+  const [range, setRange] = useState(presetRange("today"));
   const [thresholdMinutes, setThresholdMinutes] = useState(0);
   const [excludeWeekends, setExcludeWeekends] = useState(true);
 
@@ -224,7 +224,8 @@ export default function Reports({ isHq }) {
   const [monthly, setMonthly] = useState([]);
   const [monthlyBusy, setMonthlyBusy] = useState(false);
 
-  const [todayAbs, setTodayAbs] = useState(null);
+  const [summaryData, setSummaryData] = useState(null);
+  const [activeKpi, setActiveKpi] = useState(null); // total|on_time|late|absent|on_leave
 
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -261,9 +262,9 @@ export default function Reports({ isHq }) {
     setBusy(true);
     setError(null);
     try {
-      const [todayAbsRes, lateRows, earlyRows, lateListRows, earlyListRows, summaryRes, detailRows, trendRes, riskRes] =
+      const [summaryKpiRes, lateRows, earlyRows, lateListRows, earlyListRows, summaryRes, detailRows, trendRes, riskRes] =
         await Promise.all([
-          api.todayAbsentees(token, { campusId: isHq ? campusId || undefined : undefined, excludeWeekends }),
+          api.reportSummary(token, filters),
           api.lateRanking(token, filters),
           api.earlyLeaveRanking(token, filters),
           api.lateDetail(token, filters),
@@ -278,7 +279,7 @@ export default function Reports({ isHq }) {
             unresolvedThreshold,
           }),
         ]);
-      setTodayAbs(todayAbsRes);
+      setSummaryData(summaryKpiRes);
       setLate(lateRows);
       setEarly(earlyRows);
       setLateList(lateListRows);
@@ -374,45 +375,6 @@ export default function Reports({ isHq }) {
   return (
     <div className="stack">
       <section className="card">
-        <h2 className="card__title">
-          Bugün Gelmeyenler{todayAbs ? ` (${todayAbs.count})` : ""}
-        </h2>
-        <p className="muted small">
-          Bugün gelmesi beklenen ama henüz giriş yapmamış ve izinli olmayan personel.
-          Gün içinde kişiler giriş yaptıkça liste kısalır. (Kayıt/go-live tarihinden
-          önce takip edilmeyenler ve çalışma günü bugün olmayanlar listelenmez.)
-        </p>
-        {!todayAbs ? (
-          <p className="muted">Yükleniyor…</p>
-        ) : todayAbs.count === 0 ? (
-          <p className="notice">Bugün beklenen herkes giriş yaptı. 🎉</p>
-        ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Ad Soyad</th>
-                  <th>Görev / Branş</th>
-                  {isHq && <th>Kampüs</th>}
-                  <th>Telefon</th>
-                </tr>
-              </thead>
-              <tbody>
-                {todayAbs.entries.map((r) => (
-                  <tr key={r.user_id}>
-                    <td><strong>{r.full_name}</strong></td>
-                    <td className="muted small">{roleLabel(r)}</td>
-                    {isHq && <td className="muted small">{r.campus_name || "—"}</td>}
-                    <td className="muted small">{r.phone || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <section className="card">
         <div className="filters">
           <div className="actions">
             <button className="btn btn--ghost btn--sm" onClick={() => setRange(presetRange("today"))}>
@@ -506,20 +468,68 @@ export default function Reports({ isHq }) {
         {busy && <p className="muted">Yükleniyor…</p>}
       </section>
 
-      <section className="kpis">
-        <div className="kpi">
-          <div className="kpi__value">{summary?.unresolved_count ?? "—"}</div>
-          <div className="kpi__label">Durum girilmemiş gün (unresolved)</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi__value">{late.length}</div>
-          <div className="kpi__label">Geç kalan personel sayısı</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi__value">{early.length}</div>
-          <div className="kpi__label">Erken çıkan personel sayısı</div>
-        </div>
-      </section>
+      {(() => {
+        const KPIS = [
+          { key: "total", label: "Toplam Personel", value: summaryData?.total_staff, list: summaryData?.all_staff, showDays: false },
+          { key: "on_time", label: "Zamanında Giriş", value: summaryData?.on_time.length, list: summaryData?.on_time, showDays: true },
+          { key: "late", label: "Geç Kalanlar", value: summaryData?.late.length, list: summaryData?.late, showDays: true },
+          { key: "absent", label: "Gelmeyenler", value: summaryData?.absent.length, list: summaryData?.absent, showDays: true },
+          { key: "on_leave", label: "İzinliler", value: summaryData?.on_leave.length, list: summaryData?.on_leave, showDays: true },
+        ];
+        const active = KPIS.find((k) => k.key === activeKpi);
+        return (
+          <>
+            <section className="kpis kpis--clickable">
+              {KPIS.map((k) => (
+                <button
+                  key={k.key}
+                  type="button"
+                  className={`kpi kpi--btn kpi--${k.key} ${activeKpi === k.key ? "kpi--active" : ""}`}
+                  onClick={() => setActiveKpi(activeKpi === k.key ? null : k.key)}
+                  title="Listeyi görmek için tıklayın"
+                >
+                  <div className="kpi__value">{k.value ?? "—"}</div>
+                  <div className="kpi__label">{k.label}</div>
+                </button>
+              ))}
+            </section>
+
+            {active && summaryData && (
+              <section className="card">
+                <h2 className="card__title">
+                  {active.label} — {active.list?.length ?? 0} kişi
+                </h2>
+                {!active.list || active.list.length === 0 ? (
+                  <p className="muted">Kayıt yok.</p>
+                ) : (
+                  <div className="table-wrap">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Ad Soyad</th>
+                          <th>Görev / Branş</th>
+                          {isHq && <th>Kampüs</th>}
+                          {active.showDays && <th>Gün</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {active.list.map((r) => (
+                          <tr key={r.user_id}>
+                            <td><strong>{r.full_name}</strong></td>
+                            <td className="muted small">{roleLabel(r)}</td>
+                            {isHq && <td className="muted small">{r.campus_name || "—"}</td>}
+                            {active.showDays && <td className="muted small">{r.days}</td>}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            )}
+          </>
+        );
+      })()}
 
       <section className="card">
         <div className="filters">

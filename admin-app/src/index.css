@@ -249,6 +249,44 @@ textarea {
   justify-content: center;
 }
 
+/* Clickable summary KPIs (Reports): five buttons that expand a people list. */
+.kpis--clickable {
+  grid-template-columns: repeat(5, 1fr);
+}
+@media (max-width: 900px) {
+  .kpis--clickable {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.kpi--btn {
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.15s, transform 0.05s;
+}
+.kpi--btn:hover {
+  border-color: var(--accent);
+}
+.kpi--btn:active {
+  transform: translateY(1px);
+}
+.kpi--active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent) inset;
+}
+/* Per-bucket accent colours on the number. */
+.kpi--on_time .kpi__value {
+  color: #22c55e;
+}
+.kpi--late .kpi__value {
+  color: #f59e0b;
+}
+.kpi--absent .kpi__value {
+  color: #ef4444;
+}
+.kpi--on_leave .kpi__value {
+  color: #3b82f6;
+}
+
 /* Presence list */
 .presence {
   list-style: none;
