@@ -601,6 +601,29 @@ def test_today_absentees_lists_expected_then_drops_after_scan(client, seeded):
     assert seeded["staff_id"] not in {e["user_id"] for e in after["entries"]}
 
 
+def test_report_summary_buckets_move_after_scan(client, seeded):
+    today = _today_local().isoformat()
+    params = {"start_date": today, "end_date": today, "exclude_weekends": "false"}
+
+    # Before anything: expected today, no scan, no leave → absent bucket.
+    s1 = client.get("/api/reports/summary", headers=seeded["dir_a_headers"], params=params).json()
+    assert s1["total_staff"] >= 1
+    assert seeded["staff_id"] in {p["user_id"] for p in s1["absent"]}
+    assert s1["on_time"] == [] and s1["late"] == []
+
+    # A manual on-time IN (campus shift starts 08:00, so 07:30 is on time).
+    r = client.post(
+        "/api/logs/manual",
+        headers=seeded["dir_a_headers"],
+        json={"user_id": seeded["staff_id"], "type": "IN", "date": today, "time": "07:30:00"},
+    )
+    assert r.status_code == 201
+
+    s2 = client.get("/api/reports/summary", headers=seeded["dir_a_headers"], params=params).json()
+    assert seeded["staff_id"] in {p["user_id"] for p in s2["on_time"]}
+    assert seeded["staff_id"] not in {p["user_id"] for p in s2["absent"]}
+
+
 def _bulk_import_one(client, seeded, full_name, phone):
     r = client.post(
         "/api/staff/bulk",

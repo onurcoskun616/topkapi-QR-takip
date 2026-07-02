@@ -52,8 +52,10 @@ from ..schemas import (
     LocationAlertsResponse,
     MonthlyHoursEntry,
     MonthlyHoursResponse,
+    ReportSummaryResponse,
     RiskReportResponse,
     RiskStaffEntry,
+    SummaryPerson,
     TodayAbsenteeEntry,
     TodayAbsenteesResponse,
     UnresolvedReminderResponse,
@@ -205,6 +207,117 @@ async def _campus_names_map(db: AsyncSession) -> dict[int, str]:
 async def _campus_shift_map(db: AsyncSession) -> dict[int, Campus]:
     rows = await db.execute(select(Campus))
     return {c.id: c for c in rows.scalars().all()}
+
+
+@router.get("/summary", response_model=ReportSummaryResponse)
+async def report_summary(
+    start_date: date,
+    end_date: date,
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+    campus_id: int | None = Query(None, description="hq only: filter to one campus"),
+    threshold_minutes: int = Query(0, ge=0, le=240),
+    exclude_weekends: bool = True,
+):
+    """Headline summary for the selected range with the people behind each
+    bucket (so the panel can expand a list on click): total active staff, and —
+    counted in expected working days — who came on time, who was late, who was
+    absent without a status, and who was on leave. Honours the go-live/
+    registration tracking rule via ``_expected_days_for_staff``."""
+    _validate_range(start_date, end_date)
+    tz = ZoneInfo(settings.attendance_timezone)
+    staff = await _scoped_active_staff(db, manager, campus_id, None)
+    campus_names = await _campus_names_map(db)
+
+    def person(s: User, days: int) -> SummaryPerson:
+        return SummaryPerson(
+            user_id=s.id,
+            full_name=s.full_name,
+            job_title=s.job_title,
+            branch=s.branch,
+            campus_name=campus_names.get(s.campus_id) if s.campus_id else None,
+            days=days,
+        )
+
+    all_staff = sorted(
+        (person(s, 0) for s in staff), key=lambda p: ((p.campus_name or ""), p.full_name)
+    )
+    empty = ReportSummaryResponse(
+        start_date=start_date, end_date=end_date, total_staff=len(staff),
+        all_staff=all_staff, on_time=[], late=[], absent=[], on_leave=[],
+    )
+    if not staff:
+        return empty
+
+    all_days = _all_days(start_date, end_date)
+    if len(staff) * max(len(all_days), 1) > 40000:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sonuç kümesi çok büyük; tarih aralığını veya kampüs filtresini daraltın.",
+        )
+
+    campuses = await _campus_shift_map(db)
+    logs = await _logs_for_staff(db, [s.id for s in staff], start_date, end_date)
+    grouped = _group_by_staff_day(logs, tz)
+    national_holidays, holidays_by_campus = await _load_holidays(db, start_date, end_date)
+
+    leave_rows = await db.execute(
+        select(LeaveRecord).where(
+            LeaveRecord.user_id.in_([s.id for s in staff]),
+            LeaveRecord.status == LeaveStatus.active,
+            LeaveRecord.start_date <= end_date,
+            LeaveRecord.end_date >= start_date,
+        )
+    )
+    leaves_by_staff: dict[int, list[LeaveRecord]] = defaultdict(list)
+    for lv in leave_rows.scalars().all():
+        leaves_by_staff[lv.user_id].append(lv)
+
+    on_time: dict[int, int] = defaultdict(int)
+    late: dict[int, int] = defaultdict(int)
+    absent: dict[int, int] = defaultdict(int)
+    on_leave: dict[int, int] = defaultdict(int)
+
+    for s in staff:
+        campus = campuses.get(s.campus_id) if s.campus_id else None
+        staff_leaves = leaves_by_staff.get(s.id, [])
+        for d in _expected_days_for_staff(
+            s, all_days, exclude_weekends, national_holidays, holidays_by_campus
+        ):
+            bucket = grouped.get((s.id, d))
+            if bucket and bucket.first_in is not None:
+                if campus and campus.shift_start is not None:
+                    shift_start_local = datetime.combine(d, campus.shift_start, tzinfo=tz)
+                    minutes_late = (bucket.first_in - shift_start_local).total_seconds() / 60
+                    if minutes_late > threshold_minutes:
+                        late[s.id] += 1
+                    else:
+                        on_time[s.id] += 1
+                else:
+                    on_time[s.id] += 1  # present; no shift configured to judge lateness
+            elif any(lv.start_date <= d <= lv.end_date for lv in staff_leaves):
+                on_leave[s.id] += 1
+            else:
+                absent[s.id] += 1
+
+    def group(counter: dict[int, int], by_days_desc: bool) -> list[SummaryPerson]:
+        people = [person(s, counter[s.id]) for s in staff if counter[s.id] > 0]
+        if by_days_desc:
+            people.sort(key=lambda p: (-p.days, p.full_name))
+        else:
+            people.sort(key=lambda p: ((p.campus_name or ""), p.full_name))
+        return people
+
+    return ReportSummaryResponse(
+        start_date=start_date,
+        end_date=end_date,
+        total_staff=len(staff),
+        all_staff=all_staff,
+        on_time=group(on_time, False),
+        late=group(late, True),
+        absent=group(absent, True),
+        on_leave=group(on_leave, True),
+    )
 
 
 @router.get("/today-absentees", response_model=TodayAbsenteesResponse)

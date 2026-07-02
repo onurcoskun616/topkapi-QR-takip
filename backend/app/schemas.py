@@ -434,6 +434,32 @@ class KioskAnnouncementsResponse(BaseModel):
 # --------------------------------------------------------------------------- #
 # Reports — late / early-leave rankings, absence detail + aggregate stats
 # --------------------------------------------------------------------------- #
+class SummaryPerson(BaseModel):
+    """One staff member in a report-summary bucket, with how many days in the
+    range they fell into it (1 for a single-day/today view)."""
+
+    user_id: int
+    full_name: str
+    job_title: str | None = None
+    branch: str | None = None
+    campus_name: str | None = None
+    days: int = 1
+
+
+class ReportSummaryResponse(BaseModel):
+    """Clickable summary for the selected range: a headline count per bucket
+    plus the people behind each, so the panel can expand a list on click."""
+
+    start_date: date
+    end_date: date
+    total_staff: int
+    all_staff: list[SummaryPerson]
+    on_time: list[SummaryPerson]
+    late: list[SummaryPerson]
+    absent: list[SummaryPerson]
+    on_leave: list[SummaryPerson]
+
+
 class TodayAbsenteeEntry(BaseModel):
     """A staff member expected today who has not scanned in and is not on an
     active leave — i.e. not here (yet) today."""
