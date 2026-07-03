@@ -624,6 +624,23 @@ def test_report_summary_buckets_move_after_scan(client, seeded):
     assert seeded["staff_id"] not in {p["user_id"] for p in s2["absent"]}
 
 
+def test_summary_group_xlsx_export(client, seeded):
+    today = _today_local().isoformat()
+    r = client.get(
+        "/api/reports/summary-group.xlsx",
+        headers=seeded["dir_a_headers"],
+        params={"start_date": today, "end_date": today, "group": "absent", "exclude_weekends": "false"},
+    )
+    assert r.status_code == 200
+    assert len(r.content) > 0
+    r2 = client.get(
+        "/api/reports/summary-group.xlsx",
+        headers=seeded["dir_a_headers"],
+        params={"start_date": today, "end_date": today, "group": "bogus"},
+    )
+    assert r2.status_code == 400
+
+
 def _bulk_import_one(client, seeded, full_name, phone):
     r = client.post(
         "/api/staff/bulk",

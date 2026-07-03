@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth";
-import { api, downloadLogsXlsx, downloadReportsXlsx, downloadMonthlyHoursXlsx } from "../api";
+import {
+  api,
+  downloadLogsXlsx,
+  downloadReportsXlsx,
+  downloadMonthlyHoursXlsx,
+  downloadSummaryGroupXlsx,
+} from "../api";
+import { openWarningDoc } from "../warningDocs";
 
 const MONTH_NAMES = [
   "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -194,7 +201,7 @@ function RiskPanel({ risk, isHq, thresholds, onThreshold }) {
 }
 
 export default function Reports({ isHq }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [campuses, setCampuses] = useState([]);
   const [campusId, setCampusId] = useState("");
   const [staffList, setStaffList] = useState([]);
@@ -372,6 +379,34 @@ export default function Reports({ isHq }) {
     }
   };
 
+  const onSummaryGroupXlsx = async (groupKey) => {
+    try {
+      await downloadSummaryGroupXlsx(token, {
+        startDate: range.start,
+        endDate: range.end,
+        group: groupKey,
+        campusId: isHq ? campusId || undefined : undefined,
+        thresholdMinutes,
+        excludeWeekends,
+      });
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  // İhtar / Tutanak for a late (kind="late") or absent (kind="absent") person.
+  const openDoc = (person, kind, docType) =>
+    openWarningDoc({
+      kind,
+      docType,
+      person,
+      school: person.campus_name || "",
+      principal: user?.full_name || "",
+      periodStart: range.start,
+      periodEnd: range.end,
+      issueDate: iso(new Date()),
+    });
+
   return (
     <div className="stack">
       <section className="card">
@@ -494,39 +529,80 @@ export default function Reports({ isHq }) {
               ))}
             </section>
 
-            {active && summaryData && (
-              <section className="card">
-                <h2 className="card__title">
-                  {active.label} — {active.list?.length ?? 0} kişi
-                </h2>
-                {!active.list || active.list.length === 0 ? (
-                  <p className="muted">Kayıt yok.</p>
-                ) : (
-                  <div className="table-wrap">
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th>Ad Soyad</th>
-                          <th>Görev / Branş</th>
-                          {isHq && <th>Kampüs</th>}
-                          {active.showDays && <th>Gün</th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {active.list.map((r) => (
-                          <tr key={r.user_id}>
-                            <td><strong>{r.full_name}</strong></td>
-                            <td className="muted small">{roleLabel(r)}</td>
-                            {isHq && <td className="muted small">{r.campus_name || "—"}</td>}
-                            {active.showDays && <td className="muted small">{r.days}</td>}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+            {active && summaryData && (() => {
+              const warnKind =
+                active.key === "late" ? "late" : active.key === "absent" ? "absent" : null;
+              return (
+                <section className="card">
+                  <div className="filters">
+                    <h2 className="card__title" style={{ margin: 0 }}>
+                      {active.label} — {active.list?.length ?? 0} kişi
+                    </h2>
+                    <div className="grow" />
+                    {active.list && active.list.length > 0 && (
+                      <button
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => onSummaryGroupXlsx(active.key)}
+                      >
+                        Excel İndir
+                      </button>
+                    )}
                   </div>
-                )}
-              </section>
-            )}
+                  {warnKind && (
+                    <p className="muted small">
+                      Satırdaki <strong>İhtar</strong> ve <strong>Tutanak</strong> ile ilgili
+                      personel için hazır belge açılır (okul adı ve müdür adı yazdırmadan
+                      önce düzenlenebilir; tutanak iki şahitlidir).
+                    </p>
+                  )}
+                  {!active.list || active.list.length === 0 ? (
+                    <p className="muted">Kayıt yok.</p>
+                  ) : (
+                    <div className="table-wrap">
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            <th>Ad Soyad</th>
+                            <th>Görev / Branş</th>
+                            {isHq && <th>Kampüs</th>}
+                            {active.showDays && <th>Gün</th>}
+                            {warnKind && <th>Belge</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {active.list.map((r) => (
+                            <tr key={r.user_id}>
+                              <td><strong>{r.full_name}</strong></td>
+                              <td className="muted small">{roleLabel(r)}</td>
+                              {isHq && <td className="muted small">{r.campus_name || "—"}</td>}
+                              {active.showDays && <td className="muted small">{r.days}</td>}
+                              {warnKind && (
+                                <td className="actions">
+                                  <button
+                                    className="btn btn--ghost btn--sm"
+                                    onClick={() => openDoc(r, warnKind, "ihtar")}
+                                    title="İzinsiz geç gelme/gelmeme ihtarı (yazdırılabilir)"
+                                  >
+                                    İhtar
+                                  </button>
+                                  <button
+                                    className="btn btn--ghost btn--sm"
+                                    onClick={() => openDoc(r, warnKind, "tutanak")}
+                                    title="İki şahitli tutanak (yazdırılabilir)"
+                                  >
+                                    Tutanak
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+              );
+            })()}
           </>
         );
       })()}

@@ -469,6 +469,27 @@ export async function downloadLogsXlsx(token, { userId, campusId, day, startDate
   );
 }
 
+/** Download one report-summary bucket (e.g. late / absent) as .xlsx. */
+export async function downloadSummaryGroupXlsx(
+  token,
+  { startDate, endDate, group, campusId, thresholdMinutes, excludeWeekends } = {}
+) {
+  await downloadFile(
+    token,
+    "/api/reports/summary-group.xlsx",
+    {
+      start_date: startDate,
+      end_date: endDate,
+      group,
+      campus_id: campusId,
+      threshold_minutes: thresholdMinutes,
+      exclude_weekends: excludeWeekends,
+    },
+    `ozet_${group}_${startDate}_${endDate}.xlsx`,
+    "Excel dışa aktarım başarısız"
+  );
+}
+
 /** Trigger a browser download of the monthly-hours (puantaj) workbook. */
 export async function downloadMonthlyHoursXlsx(
   token,
