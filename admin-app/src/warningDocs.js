@@ -23,8 +23,16 @@ function periodText(start, end) {
 }
 
 const TITLES = {
-  late: { ihtar: "İŞE İZİNSİZ GEÇ GELME İHTARI", tutanak: "İŞE İZİNSİZ GEÇ GELME TUTANAĞI" },
-  absent: { ihtar: "İŞE İZİNSİZ GELMEME İHTARI", tutanak: "İŞE İZİNSİZ GELMEME TUTANAĞI" },
+  late: {
+    ihtar: "İŞE İZİNSİZ GEÇ GELME İHTARI",
+    tutanak: "DURUM TESPİT TUTANAĞI (İzinsiz Geç Gelme)",
+    savunma: "SAVUNMA İSTEM YAZISI (İzinsiz Geç Gelme)",
+  },
+  absent: {
+    ihtar: "İŞE İZİNSİZ GELMEME İHTARI",
+    tutanak: "DURUM TESPİT TUTANAĞI (İzinsiz Gelmeme)",
+    savunma: "SAVUNMA İSTEM YAZISI (İzinsiz Gelmeme)",
+  },
 };
 
 // The "olay" (incident) sentence, tailored to late vs absent and day count.
@@ -52,10 +60,34 @@ function ihtarBody(kind, days, period) {
 }
 
 function tutanakBody(kind, days, period) {
+  const fiil =
+    kind === "late"
+      ? "iznimiz ve bilgimiz olmaksızın, mazeretsiz olarak mesaisine <strong>geç gelmiştir</strong>"
+      : "iznimiz ve bilgimiz olmaksızın, mazeretsiz olarak mesaisine <strong>gelmemiştir</strong>";
+  const p = period || "ilgili dönemde";
   return `
-    <p>${incidentSentence(kind, days, period)}</p>
-    <p>Durum, tarafımızca tespit edilerek iş bu tutanak <strong>iki şahit huzurunda</strong>
-       tanzim edilmiş, ilgili personele tebliğ edilmek üzere düzenlenmiştir.</p>`;
+    <p>Aşağıda kimlik bilgileri yer alan personel, ${esc(p)} <strong>${days}</strong> iş günü,
+       ${fiil}.</p>
+    <p>İş bu durum tespit tutanağı, tarafımızca <strong>iki şahit huzurunda</strong> tanzim
+       edilerek imza altına alınmıştır.</p>`;
+}
+
+function savunmaBody(kind, days, period) {
+  const fiil =
+    kind === "late"
+      ? "işe izinsiz ve mazeretsiz olarak <strong>geç geldiğiniz</strong>"
+      : "işe izinsiz ve mazeretsiz olarak <strong>gelmediğiniz</strong>";
+  const p = period || "ilgili dönemde";
+  return `
+    <p>Sayın <strong class="ec">%NAME%</strong>,</p>
+    <p>${esc(p)} <strong>${days}</strong> iş günü ${fiil}, işyeri giriş-çıkış kayıtlarından
+       tespit edilmiştir.</p>
+    <p>Söz konusu duruma ilişkin <strong>yazılı savunmanızı</strong>, iş bu yazının tarafınıza
+       tebliğ edildiği tarihten itibaren <strong>en geç 3 (üç) iş günü</strong> içinde yazılı
+       olarak okul müdürlüğüne sunmanız gerekmektedir.</p>
+    <p>Belirtilen sürede savunmanızı sunmadığınız takdirde, hakkınızda mevcut kayıtlar üzerinden
+       değerlendirme yapılacağı hususunu önemle hatırlatırız.</p>
+    <p>Gereğini bilgilerinize rica ederiz.</p>`;
 }
 
 /**
@@ -75,26 +107,22 @@ export function openWarningDoc(o) {
   const days = o.person.days || 1;
   const period = periodText(o.periodStart, o.periodEnd);
   const role = [o.person.job_title, o.person.branch].filter(Boolean).join(" / ") || "-";
-  const bodyHtml = (o.docType === "ihtar" ? ihtarBody : tutanakBody)(o.kind, days, period)
-    .replace("%NAME%", esc(o.person.full_name));
+  const bodyFn =
+    o.docType === "ihtar" ? ihtarBody : o.docType === "savunma" ? savunmaBody : tutanakBody;
+  const bodyHtml = bodyFn(o.kind, days, period).replace("%NAME%", esc(o.person.full_name));
 
-  const witnesses = o.docType === "tutanak"
+  // Tutanak: Okul Müdürü + iki şahit (personel tebellüğü yok); şahit adları
+  // yazdırmadan önce düzenlenebilir. İhtar: müdür tebliğ eder, personel tebellüğ eder.
+  const signatures = o.docType === "tutanak"
     ? `
       <div class="sign-row">
-        <div class="sign"><div class="sign-line"></div>Şahit 1<br/><span class="hint">(Ad Soyad / İmza)</span></div>
-        <div class="sign"><div class="sign-line"></div>Şahit 2<br/><span class="hint">(Ad Soyad / İmza)</span></div>
-      </div>`
-    : "";
-
-  const receipt = o.docType === "ihtar"
-    ? `
-      <div class="sign-row">
-        <div class="sign"><div class="sign-line"></div>İhtarı Tebliğ Eden<br/><span class="ed">%PRINCIPAL%</span><br/><span class="hint">Okul Müdürü</span></div>
-        <div class="sign"><div class="sign-line"></div>Tebellüğ Eden (Personel)<br/><span class="hint">${esc(o.person.full_name)}</span></div>
+        <div class="sign"><div class="sign-line"></div>Tutanağı Düzenleyen<br/><span class="ed">%PRINCIPAL%</span><br/><span class="hint">Okul Müdürü</span></div>
+        <div class="sign"><div class="sign-line"></div>Şahit 1<br/><span class="ed">Ad Soyad</span><br/><span class="hint">İmza</span></div>
+        <div class="sign"><div class="sign-line"></div>Şahit 2<br/><span class="ed">Ad Soyad</span><br/><span class="hint">İmza</span></div>
       </div>`
     : `
       <div class="sign-row">
-        <div class="sign"><div class="sign-line"></div>Tutanağı Düzenleyen<br/><span class="ed">%PRINCIPAL%</span><br/><span class="hint">Okul Müdürü</span></div>
+        <div class="sign"><div class="sign-line"></div>İhtarı Tebliğ Eden<br/><span class="ed">%PRINCIPAL%</span><br/><span class="hint">Okul Müdürü</span></div>
         <div class="sign"><div class="sign-line"></div>Tebellüğ Eden (Personel)<br/><span class="hint">${esc(o.person.full_name)}</span></div>
       </div>`;
 
@@ -144,9 +172,8 @@ export function openWarningDoc(o) {
       <tr><td class="k">Gün Sayısı</td><td>${days}</td></tr>
     </table>
     ${bodyHtml}
-    ${witnesses}
     <div class="date">Tarih: ${fmtDate(o.issueDate)}</div>
-    ${receipt}
+    ${signatures}
   </div>
   <script>
     // Make the school / principal names editable inline.

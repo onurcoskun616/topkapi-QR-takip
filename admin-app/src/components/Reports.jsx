@@ -550,9 +550,10 @@ export default function Reports({ isHq }) {
                   </div>
                   {warnKind && (
                     <p className="muted small">
-                      Satırdaki <strong>İhtar</strong> ve <strong>Tutanak</strong> ile ilgili
-                      personel için hazır belge açılır (okul adı ve müdür adı yazdırmadan
-                      önce düzenlenebilir; tutanak iki şahitlidir).
+                      Satırdaki <strong>İhtar</strong>, <strong>Tutanak</strong> ve{" "}
+                      <strong>Savunma</strong> ile ilgili personel için hazır belge açılır
+                      (okul adı, müdür ve şahit adları yazdırmadan önce düzenlenebilir; tutanak
+                      iki şahitli durum tespit tutanağıdır; savunma yazısı 3 gün içinde ister).
                     </p>
                   )}
                   {!active.list || active.list.length === 0 ? (
@@ -588,9 +589,16 @@ export default function Reports({ isHq }) {
                                   <button
                                     className="btn btn--ghost btn--sm"
                                     onClick={() => openDoc(r, warnKind, "tutanak")}
-                                    title="İki şahitli tutanak (yazdırılabilir)"
+                                    title="İki şahitli durum tespit tutanağı (yazdırılabilir)"
                                   >
                                     Tutanak
+                                  </button>
+                                  <button
+                                    className="btn btn--ghost btn--sm"
+                                    onClick={() => openDoc(r, warnKind, "savunma")}
+                                    title="3 gün içinde yazılı savunma istem yazısı"
+                                  >
+                                    Savunma
                                   </button>
                                 </td>
                               )}
