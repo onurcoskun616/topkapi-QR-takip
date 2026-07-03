@@ -326,6 +326,64 @@ async def report_summary(
     )
 
 
+_SUMMARY_GROUP_TITLES = {
+    "all": "Tüm Personel",
+    "on_time": "Zamanında Giriş",
+    "late": "Geç Kalanlar",
+    "absent": "Gelmeyenler",
+    "on_leave": "İzinliler",
+}
+
+
+@router.get("/summary-group.xlsx", response_class=StreamingResponse)
+async def export_summary_group_xlsx(
+    start_date: date,
+    end_date: date,
+    group: str = Query(..., description="all|on_time|late|absent|on_leave"),
+    manager: User = Depends(get_current_manager),
+    db: AsyncSession = Depends(get_db),
+    campus_id: int | None = Query(None),
+    threshold_minutes: int = Query(0, ge=0, le=240),
+    exclude_weekends: bool = True,
+):
+    """One summary bucket (the people behind a KPI) as an Excel workbook."""
+    if group not in _SUMMARY_GROUP_TITLES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz grup.")
+    summary = await report_summary(
+        start_date, end_date, manager, db, campus_id, threshold_minutes, exclude_weekends
+    )
+    people = {
+        "all": summary.all_staff,
+        "on_time": summary.on_time,
+        "late": summary.late,
+        "absent": summary.absent,
+        "on_leave": summary.on_leave,
+    }[group]
+
+    show_days = group != "all"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = _SUMMARY_GROUP_TITLES[group][:31]
+    ws.append([f"{_SUMMARY_GROUP_TITLES[group]} — {start_date} / {end_date}"])
+    header = ["Ad Soyad", "Görev", "Branş", "Kampüs"] + (["Gün"] if show_days else [])
+    ws.append(header)
+    for p in people:
+        row = [p.full_name, p.job_title or "", p.branch or "", p.campus_name or ""]
+        if show_days:
+            row.append(p.days)
+        ws.append(row)
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fn = f"ozet_{group}_{start_date}_{end_date}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'},
+    )
+
+
 @router.get("/today-absentees", response_model=TodayAbsenteesResponse)
 async def today_absentees(
     manager: User = Depends(get_current_manager),
