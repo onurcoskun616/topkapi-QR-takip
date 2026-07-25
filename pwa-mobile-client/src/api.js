@@ -111,6 +111,63 @@ export const api = {
       },
       body: JSON.stringify(subscription),
     }).then(parse),
+
+  // Live meeting minutes (Faz 1 — ASR + manual speaker tagging).
+  createMeeting: (accessToken, payload) =>
+    fetch(`${API_BASE_URL}/api/meetings`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    }).then(parse),
+
+  getMeeting: (accessToken, meetingId) =>
+    fetch(`${API_BASE_URL}/api/meetings/${meetingId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then(parse),
+
+  startMeeting: (accessToken, meetingId) =>
+    fetch(`${API_BASE_URL}/api/meetings/${meetingId}/start`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then(parse),
+
+  // `participantId` is the currently-selected "who's speaking" chip — may be
+  // null if nobody was selected (tagged manually afterward).
+  uploadAudioChunk: (accessToken, meetingId, audioBlob, participantId) => {
+    const form = new FormData();
+    form.append("audio", audioBlob, "chunk.webm");
+    if (participantId != null) form.append("participant_id", String(participantId));
+    return fetch(`${API_BASE_URL}/api/meetings/${meetingId}/audio-chunk`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: form,
+    }).then((res) => (res.status === 204 ? null : parse(res)));
+  },
+
+  getSegments: (accessToken, meetingId, afterId) =>
+    fetch(
+      `${API_BASE_URL}/api/meetings/${meetingId}/segments?after_id=${afterId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    ).then(parse),
+
+  patchSegment: (accessToken, meetingId, segmentId, payload) =>
+    fetch(`${API_BASE_URL}/api/meetings/${meetingId}/segments/${segmentId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    }).then(parse),
+
+  endMeeting: (accessToken, meetingId) =>
+    fetch(`${API_BASE_URL}/api/meetings/${meetingId}/end`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then(parse),
 };
 
 export { API_BASE_URL };

@@ -496,3 +496,116 @@ class PushSubscription(Base):
     )
 
     user: Mapped["User"] = relationship()
+
+
+class MeetingStatus(str, enum.Enum):
+    """Lifecycle of a live meeting-minutes session."""
+
+    setup = "setup"  # being configured (title/agenda/participants), not yet recording
+    live = "live"     # recording — audio chunks are accepted and transcribed
+    ended = "ended"   # recording stopped; transcript is final (read-only)
+
+
+class Meeting(Base):
+    """A live meeting-minutes ("toplantı tutanağı") session — Faz 1: ASR with
+    manual speaker-name tagging, no diarization/voice-matching yet (Faz 2) and
+    no LLM compilation or signature/PDF flow yet (Faz 3).
+
+    Raw audio is never persisted (see ``MeetingTranscriptSegment``) — voice is
+    biometric data under KVKK, so only the transcribed text is kept.
+    """
+
+    __tablename__ = "meetings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[MeetingStatus] = mapped_column(
+        Enum(MeetingStatus, name="meeting_status"),
+        default=MeetingStatus.setup,
+        nullable=False,
+    )
+    created_by_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    created_by: Mapped["User"] = relationship(foreign_keys="Meeting.created_by_id")
+    agenda_items: Mapped[list["MeetingAgendaItem"]] = relationship(
+        back_populates="meeting",
+        order_by="MeetingAgendaItem.order_index",
+        cascade="all, delete-orphan",
+    )
+    participants: Mapped[list["MeetingParticipant"]] = relationship(
+        back_populates="meeting",
+        order_by="MeetingParticipant.order_index",
+        cascade="all, delete-orphan",
+    )
+    segments: Mapped[list["MeetingTranscriptSegment"]] = relationship(
+        back_populates="meeting",
+        order_by="MeetingTranscriptSegment.id",
+        cascade="all, delete-orphan",
+    )
+
+
+class MeetingAgendaItem(Base):
+    __tablename__ = "meeting_agenda_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(
+        ForeignKey("meetings.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    order_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+
+    meeting: Mapped["Meeting"] = relationship(back_populates="agenda_items")
+
+
+class MeetingParticipant(Base):
+    """A participant identified by name only — not a system ``User`` account,
+    since attendees of a meeting need not be registered staff (per the
+    architecture doc, names are entered freely at meeting setup)."""
+
+    __tablename__ = "meeting_participants"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(
+        ForeignKey("meetings.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    order_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+
+    meeting: Mapped["Meeting"] = relationship(back_populates="participants")
+
+
+class MeetingTranscriptSegment(Base):
+    """One ASR-transcribed line. ``participant_id`` is NULL until manually
+    tagged (Faz 1 has no diarization — the phone app selects "who's talking
+    now" before/while they speak, or a line is tagged after the fact)."""
+
+    __tablename__ = "meeting_transcript_segments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(
+        ForeignKey("meetings.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    participant_id: Mapped[int | None] = mapped_column(
+        ForeignKey("meeting_participants.id", ondelete="SET NULL"), nullable=True
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    meeting: Mapped["Meeting"] = relationship(back_populates="segments")
+    participant: Mapped["MeetingParticipant | None"] = relationship()
