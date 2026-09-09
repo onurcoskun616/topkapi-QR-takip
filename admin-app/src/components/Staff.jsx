@@ -79,7 +79,7 @@ export default function Staff({ isHq }) {
   const [workingError, setWorkingError] = useState(null);
 
   const [editForId, setEditForId] = useState(null);
-  const [editForm, setEditForm] = useState({ full_name: "", job_title: "", branch: "", birth_date: "" });
+  const [editForm, setEditForm] = useState({ full_name: "", job_title: "", branch: "", birth_date: "", campus_id: "" });
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState(null);
 
@@ -192,6 +192,7 @@ export default function Staff({ isHq }) {
       job_title: u.job_title || "",
       branch: u.branch || "",
       birth_date: u.birth_date || "",
+      campus_id: u.campus_id ? String(u.campus_id) : "",
     });
   };
 
@@ -211,11 +212,16 @@ export default function Staff({ isHq }) {
     try {
       // Only safe profile fields — phone / TC / device stay locked (identity),
       // so correcting a name/typo never opens a security hole.
+      // Campus change is HQ-only (backend enforces it too); send it only when
+      // it actually changed so a director's edit never trips the 403.
+      const campusChanged =
+        isHq && editForm.campus_id && Number(editForm.campus_id) !== u.campus_id;
       await api.updateStaff(token, u.id, {
         full_name: editForm.full_name.trim(),
         job_title: editForm.job_title.trim() || undefined,
         branch: editForm.branch.trim() || undefined,
         birth_date: editForm.birth_date || undefined,
+        campus_id: campusChanged ? Number(editForm.campus_id) : undefined,
       });
       setNotice(`${editForm.full_name.trim()} bilgileri güncellendi.`);
       closeEdit();
@@ -411,6 +417,22 @@ export default function Staff({ isHq }) {
               onChange={(e) => setEditForm({ ...editForm, birth_date: e.target.value })}
             />
           </label>
+          {isHq && (
+            <label className="field field--inline">
+              <span>Kampüs</span>
+              <select
+                value={editForm.campus_id}
+                onChange={(e) => setEditForm({ ...editForm, campus_id: e.target.value })}
+              >
+                <option value="">Kampüs seçin…</option>
+                {campuses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="actions">
             <button className="btn btn--primary btn--sm" disabled={editBusy} type="submit">
               {editBusy ? "Kaydediliyor…" : "Kaydet"}
