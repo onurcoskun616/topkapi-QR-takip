@@ -48,12 +48,43 @@ export async function promptInstall() {
   return outcome;
 }
 
+// Once a home-screen launch is confirmed, we remember it: some launchers open
+// the installed icon in a plain tab (no display-mode standalone) and in-app
+// navigations can drop the ?app=1 marker, which would otherwise bounce the user
+// back to the install gate on every screen change.
+const LAUNCH_KEY = "yoklama_launched_installed";
+
 /** True when the app is running as an installed PWA (home-screen launch). */
 export function isStandalone() {
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    window.navigator.standalone === true
-  );
+  try {
+    const byDisplay = ["standalone", "fullscreen", "minimal-ui"].some(
+      (m) => window.matchMedia(`(display-mode: ${m})`).matches
+    );
+    const byIOS = window.navigator.standalone === true;
+    // Our manifest start_url is "/?app=1", so a launch from the installed icon
+    // carries this marker even when display-mode detection fails on the device.
+    let byParam = false;
+    try {
+      byParam = new URLSearchParams(window.location.search).get("app") === "1";
+    } catch {
+      byParam = false;
+    }
+    if (byDisplay || byIOS || byParam) {
+      try {
+        localStorage.setItem(LAUNCH_KEY, "1");
+      } catch {
+        /* storage blocked — fall through to the live signals */
+      }
+      return true;
+    }
+    try {
+      return localStorage.getItem(LAUNCH_KEY) === "1";
+    } catch {
+      return false;
+    }
+  } catch {
+    return false;
+  }
 }
 
 /** iOS Safari has no beforeinstallprompt — it needs manual Share → Add steps. */
