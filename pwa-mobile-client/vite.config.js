@@ -21,7 +21,12 @@ export default defineConfig({
         background_color: "#0b1f3a",
         display: "standalone",
         orientation: "portrait",
-        start_url: "/",
+        // ?app=1 marks a launch from the installed home-screen icon. Some
+        // devices/launchers open the icon without reporting display-mode
+        // standalone; the query param lets us detect the installed launch
+        // reliably so the app never gets stuck on the install gate.
+        id: "/",
+        start_url: "/?app=1",
         scope: "/",
         icons: [
           { src: "pwa-192.png", sizes: "192x192", type: "image/png" },

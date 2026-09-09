@@ -63,6 +63,12 @@ export default function InstallGate({ children }) {
             Şimdi telefonunuzun ana ekranındaki <b>Yoklama</b> simgesinden açın
             ve kaydınızı oradan yapın.
           </p>
+          <p className="muted">
+            Ana ekrandaki simge açılmıyorsa aşağıdan devam edebilirsiniz:
+          </p>
+          <button className="btn btn--primary install__cta" onClick={onContinue}>
+            Buradan Devam Et
+          </button>
         </div>
       ) : (
         <>
