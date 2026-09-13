@@ -126,6 +126,18 @@ export function AuthProvider({ children }) {
   const requestLeave = (payload) => withAuth((t) => api.requestLeave(t, payload));
   const myStatus = () => withAuth((t) => api.myStatus(t));
 
+  // Live meeting minutes (Faz 1 — ASR + manual speaker tagging).
+  const createMeeting = (payload) => withAuth((t) => api.createMeeting(t, payload));
+  const getMeeting = (meetingId) => withAuth((t) => api.getMeeting(t, meetingId));
+  const startMeeting = (meetingId) => withAuth((t) => api.startMeeting(t, meetingId));
+  const uploadAudioChunk = (meetingId, audioBlob, participantId) =>
+    withAuth((t) => api.uploadAudioChunk(t, meetingId, audioBlob, participantId));
+  const getSegments = (meetingId, afterId) =>
+    withAuth((t) => api.getSegments(t, meetingId, afterId));
+  const patchSegment = (meetingId, segmentId, payload) =>
+    withAuth((t) => api.patchSegment(t, meetingId, segmentId, payload));
+  const endMeeting = (meetingId) => withAuth((t) => api.endMeeting(t, meetingId));
+
   // Web Push: status needs no auth (just reads server config + the browser's
   // own subscription); enabling/disabling registers this device server-side.
   const notificationStatus = () => pushStatus();
@@ -147,6 +159,13 @@ export function AuthProvider({ children }) {
         notificationStatus,
         enableNotifications,
         disableNotifications,
+        createMeeting,
+        getMeeting,
+        startMeeting,
+        uploadAudioChunk,
+        getSegments,
+        patchSegment,
+        endMeeting,
       }}
     >
       {children}

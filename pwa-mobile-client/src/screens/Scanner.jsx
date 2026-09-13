@@ -8,11 +8,12 @@ import {
   getLocationForScan,
 } from "../geolocation";
 import LeaveRequest from "./LeaveRequest";
+import MeetingApp from "./meeting/MeetingApp";
 
 export default function Scanner() {
   const { user, scan, myStatus, notificationStatus, enableNotifications, disableNotifications } =
     useAuth();
-  const [mode, setMode] = useState("scan"); // scan | leave
+  const [mode, setMode] = useState("scan"); // scan | leave | meeting
   const [phase, setPhase] = useState("scanning"); // scanning | processing | result
   const [result, setResult] = useState(null); // { kind, message }
   const [cameraError, setCameraError] = useState(null);
@@ -194,11 +195,18 @@ export default function Scanner() {
     setPhase("scanning");
   };
 
-  // Open the leave-request view: stop the camera first, then switch.
+  // Open the leave-request / meeting-minutes views: stop the camera first,
+  // then switch (both tear down the camera stream the same way).
   const openLeave = async () => {
     await stopScanner();
     setResult(null);
     setMode("leave");
+  };
+
+  const openMeeting = async () => {
+    await stopScanner();
+    setResult(null);
+    setMode("meeting");
   };
 
   const backToScan = () => {
@@ -208,6 +216,10 @@ export default function Scanner() {
 
   if (mode === "leave") {
     return <LeaveRequest onBack={backToScan} />;
+  }
+
+  if (mode === "meeting") {
+    return <MeetingApp onBack={backToScan} />;
   }
 
   return (
@@ -237,6 +249,9 @@ export default function Scanner() {
                     : "🔔 Bildirimleri Aç"}
             </button>
           )}
+          <button className="link" onClick={openMeeting}>
+            Toplantı Tutanağı
+          </button>
           <button className="link" onClick={openLeave}>
             İzin Talebi
           </button>

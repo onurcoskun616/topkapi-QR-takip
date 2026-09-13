@@ -72,6 +72,14 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_subject: str = "mailto:topkapiokullariai@gmail.com"
 
+    # Meeting minutes / ASR (Faz 1 — faster-whisper, Turkish, no diarization).
+    # Model weights download from Hugging Face on first use unless pre-baked
+    # into the image. "int8" keeps CPU inference practical without a GPU.
+    asr_model_size: str = "small"
+    asr_device: str = "cpu"
+    asr_compute_type: str = "int8"
+    asr_language: str = "tr"
+
     @property
     def go_live_date(self) -> date:
         """Parsed ``attendance_go_live_date``; falls back to 2026-07-01 if the
