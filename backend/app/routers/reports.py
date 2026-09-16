@@ -1239,8 +1239,21 @@ async def monthly_hours(
         )
         staff_leaves = leaves_by_staff.get(s.id, [])
 
+        # Per-day hourly (partial-day) leave windows, plus the total authorised
+        # hourly-leave hours in the range.
+        hourly_by_day: dict[date, list[tuple] ] = defaultdict(list)
+        leave_hours = 0.0
+        for lv in staff_leaves:
+            if lv.start_time is not None and lv.end_time is not None:
+                hourly_by_day[lv.start_date].append((lv.start_time, lv.end_time))
+                leave_hours += (
+                    datetime.combine(lv.start_date, lv.end_time)
+                    - datetime.combine(lv.start_date, lv.start_time)
+                ).total_seconds() / 3600
+
         # Worked hours / present / complete-day counts use every day with scans
-        # (someone may have worked an unscheduled day too).
+        # (someone may have worked an unscheduled day too). Time that fell inside
+        # an hourly-leave window is subtracted so it isn't counted as worked.
         total_seconds = 0.0
         worked_days = 0
         present_days = 0
@@ -1248,7 +1261,13 @@ async def monthly_hours(
             if bucket.any_log:
                 present_days += 1
             if bucket.first_in and bucket.last_out and bucket.last_out > bucket.first_in:
-                total_seconds += (bucket.last_out - bucket.first_in).total_seconds()
+                secs = (bucket.last_out - bucket.first_in).total_seconds()
+                for ws_t, we_t in hourly_by_day.get(_d, []):
+                    lo = max(bucket.first_in, datetime.combine(_d, ws_t, tzinfo=tz))
+                    hi = min(bucket.last_out, datetime.combine(_d, we_t, tzinfo=tz))
+                    if hi > lo:
+                        secs -= (hi - lo).total_seconds()
+                total_seconds += max(0.0, secs)
                 worked_days += 1
 
         # Lateness + absent/leave classification only over scheduled days.
@@ -1259,11 +1278,19 @@ async def monthly_hours(
             bucket = grouped.get((s.id, d))
             if bucket and bucket.any_log:
                 if campus and campus.shift_start and bucket.first_in:
-                    shift_start_local = datetime.combine(d, campus.shift_start, tzinfo=tz)
-                    minutes_late = (bucket.first_in - shift_start_local).total_seconds() / 60
-                    if minutes_late > 0:
-                        total_late += minutes_late
+                    # An hourly leave covering the shift start exempts lateness.
+                    exempt = any(
+                        ws_t <= campus.shift_start <= we_t
+                        for ws_t, we_t in hourly_by_day.get(d, [])
+                    )
+                    if not exempt:
+                        shift_start_local = datetime.combine(d, campus.shift_start, tzinfo=tz)
+                        minutes_late = (bucket.first_in - shift_start_local).total_seconds() / 60
+                        if minutes_late > 0:
+                            total_late += minutes_late
                 continue
+            # No scan: a full-day leave counts as a leave day; an hourly-only day
+            # with no scan is still treated leniently as a leave day.
             covering = next((lv for lv in staff_leaves if lv.start_date <= d <= lv.end_date), None)
             if covering:
                 leave_days += 1
@@ -1284,6 +1311,7 @@ async def monthly_hours(
                 total_late_minutes=round(total_late),
                 absent_days=absent_days,
                 leave_days=leave_days,
+                leave_hours=round(leave_hours, 1),
             )
         )
 
@@ -1314,6 +1342,7 @@ async def export_monthly_hours_xlsx(
             "Personel", "Görev", "Branş", "Kampüs",
             "Planlı Gün", "Geldiği Gün", "Tam Gün (Giriş+Çıkış)",
             "Toplam Saat", "Toplam Geç (dk)", "Devamsız Gün", "İzinli Gün",
+            "İzin Saati (saatlik)",
         ]
     )
     for e in report.entries:
@@ -1322,6 +1351,7 @@ async def export_monthly_hours_xlsx(
                 e.full_name, e.job_title or "", e.branch or "", e.campus_name or "",
                 e.expected_days, e.present_days, e.worked_days,
                 e.total_hours, e.total_late_minutes, e.absent_days, e.leave_days,
+                e.leave_hours,
             ]
         )
 

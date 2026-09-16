@@ -215,6 +215,28 @@ def test_hourly_leave_blocks_scan_only_in_window(client, seeded):
     assert r.status_code == 200, r.text
 
 
+def test_monthly_hours_counts_hourly_leave(client, seeded):
+    d = _today_local().replace(day=15)
+    r = client.post(
+        "/api/leaves",
+        headers=seeded["dir_a_headers"],
+        json={
+            "user_id": seeded["staff_id"], "leave_type": "Saatlik izin",
+            "start_date": d.isoformat(), "end_date": d.isoformat(),
+            "start_time": "09:00", "end_time": "11:00",
+        },
+    )
+    assert r.status_code == 201, r.text
+    r = client.get(
+        "/api/reports/monthly-hours",
+        headers=seeded["dir_a_headers"],
+        params={"year": d.year, "month": d.month, "exclude_weekends": "false"},
+    )
+    assert r.status_code == 200, r.text
+    entry = next(e for e in r.json()["entries"] if e["user_id"] == seeded["staff_id"])
+    assert entry["leave_hours"] == 2.0
+
+
 def test_hourly_leave_must_be_single_day(client, seeded):
     today = _today_local()
     r = client.post(

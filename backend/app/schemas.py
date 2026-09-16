@@ -622,7 +622,8 @@ class MonthlyHoursEntry(BaseModel):
     total_hours: float       # Σ (last OUT − first IN) across days, in hours
     total_late_minutes: int  # cumulative lateness vs campus shift start
     absent_days: int         # scheduled days with no scan and no leave
-    leave_days: int          # scheduled days covered by an active leave
+    leave_days: int          # scheduled days covered by a full-day leave
+    leave_hours: float = 0.0  # total authorised hourly (partial-day) leave, in hours
 
 
 class MonthlyHoursResponse(BaseModel):

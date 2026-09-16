@@ -671,12 +671,13 @@ export default function Reports({ isHq }) {
                 <th>Toplam Geç (dk)</th>
                 <th>Devamsız Gün</th>
                 <th>İzinli Gün</th>
+                <th>İzin Saati</th>
               </tr>
             </thead>
             <tbody>
               {monthly.length === 0 ? (
                 <tr>
-                  <td colSpan={isHq ? 10 : 9} className="muted">
+                  <td colSpan={isHq ? 11 : 10} className="muted">
                     Kayıt yok.
                   </td>
                 </tr>
@@ -705,6 +706,7 @@ export default function Reports({ isHq }) {
                       )}
                     </td>
                     <td>{m.leave_days}</td>
+                    <td>{m.leave_hours ? `${m.leave_hours} sa` : "—"}</td>
                   </tr>
                 ))
               )}
