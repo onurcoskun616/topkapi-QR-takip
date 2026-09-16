@@ -37,6 +37,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("users", "tc_kimlik_no", "VARCHAR(11)"),
     ("leave_records", "decided_by_id", "INTEGER"),
     ("leave_records", "decided_at", "TIMESTAMP WITH TIME ZONE"),
+    ("leave_records", "start_time", "TIME"),
+    ("leave_records", "end_time", "TIME"),
     ("campuses", "latitude", "DOUBLE PRECISION"),
     ("campuses", "longitude", "DOUBLE PRECISION"),
     ("campuses", "geofence_radius_m", "INTEGER"),

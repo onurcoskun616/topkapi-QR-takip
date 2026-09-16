@@ -16,7 +16,23 @@ const STATUS_BADGE = {
   cancelled: "badge badge--out",
 };
 
-const EMPTY_FORM = { user_id: "", leave_type: "", start_date: "", end_date: "", note: "" };
+const EMPTY_FORM = {
+  user_id: "",
+  leave_type: "",
+  start_date: "",
+  end_date: "",
+  hourly: false,
+  start_time: "",
+  end_time: "",
+  note: "",
+};
+
+function hoursLabel(lv) {
+  if (lv.start_time && lv.end_time) {
+    return `${lv.start_date} · ${lv.start_time.slice(0, 5)}–${lv.end_time.slice(0, 5)} (saatlik)`;
+  }
+  return `${lv.start_date} → ${lv.end_date}`;
+}
 
 export default function Leaves({ isHq }) {
   const { token } = useAuth();
@@ -77,7 +93,29 @@ export default function Leaves({ isHq }) {
     setError(null);
     setNotice(null);
     try {
-      await api.createLeave(token, { ...form, user_id: Number(form.user_id) });
+      const base = {
+        user_id: Number(form.user_id),
+        leave_type: form.leave_type,
+        note: form.note || null,
+      };
+      let payload;
+      if (form.hourly) {
+        if (!form.start_date || !form.start_time || !form.end_time) {
+          setError("Saatlik izin için tarih, başlangıç ve bitiş saatini girin.");
+          setBusy(false);
+          return;
+        }
+        payload = {
+          ...base,
+          start_date: form.start_date,
+          end_date: form.start_date, // hourly leave is a single day
+          start_time: form.start_time,
+          end_time: form.end_time,
+        };
+      } else {
+        payload = { ...base, start_date: form.start_date, end_date: form.end_date };
+      }
+      await api.createLeave(token, payload);
       setNotice("İzin/devamsızlık kaydı oluşturuldu.");
       setForm(EMPTY_FORM);
       await load();
@@ -205,13 +243,42 @@ export default function Leaves({ isHq }) {
             </datalist>
           </label>
           <label className="field">
-            <span>Başlangıç</span>
-            <input type="date" value={form.start_date} onChange={onChange("start_date")} required />
+            <span>İzin şekli</span>
+            <select
+              value={form.hourly ? "hourly" : "full"}
+              onChange={(e) => setForm({ ...form, hourly: e.target.value === "hourly" })}
+            >
+              <option value="full">Tüm gün</option>
+              <option value="hourly">Saatlik</option>
+            </select>
           </label>
-          <label className="field">
-            <span>Bitiş</span>
-            <input type="date" value={form.end_date} onChange={onChange("end_date")} required />
-          </label>
+          {form.hourly ? (
+            <>
+              <label className="field">
+                <span>Tarih</span>
+                <input type="date" value={form.start_date} onChange={onChange("start_date")} required />
+              </label>
+              <label className="field">
+                <span>Başlangıç saati</span>
+                <input type="time" value={form.start_time} onChange={onChange("start_time")} required />
+              </label>
+              <label className="field">
+                <span>Bitiş saati</span>
+                <input type="time" value={form.end_time} onChange={onChange("end_time")} required />
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="field">
+                <span>Başlangıç</span>
+                <input type="date" value={form.start_date} onChange={onChange("start_date")} required />
+              </label>
+              <label className="field">
+                <span>Bitiş</span>
+                <input type="date" value={form.end_date} onChange={onChange("end_date")} required />
+              </label>
+            </>
+          )}
           <label className="field">
             <span>Not (opsiyonel)</span>
             <input
@@ -276,9 +343,7 @@ export default function Leaves({ isHq }) {
                       <td>{lv.user_full_name}</td>
                       {isHq && <td className="muted small">{lv.campus_name || "—"}</td>}
                       <td>{lv.leave_type}</td>
-                      <td className="muted small">
-                        {lv.start_date} → {lv.end_date}
-                      </td>
+                      <td className="muted small">{hoursLabel(lv)}</td>
                       <td>
                         <span className={STATUS_BADGE[lv.status] || "badge badge--out"}>
                           {STATUS_LABEL[lv.status] || lv.status}

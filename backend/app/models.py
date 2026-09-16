@@ -274,6 +274,11 @@ class LeaveRecord(Base):
     leave_type: Mapped[str] = mapped_column(String(80), nullable=False)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # Hourly leave: when both are set, the leave only covers [start_time, end_time]
+    # on the given day(s) — the staff member is exempt from scanning in that window
+    # only. Both NULL = a full-day leave (the original behaviour).
+    start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[LeaveStatus] = mapped_column(
         Enum(LeaveStatus, name="leave_status"), default=LeaveStatus.active, nullable=False
