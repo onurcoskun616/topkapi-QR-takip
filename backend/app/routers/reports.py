@@ -290,9 +290,23 @@ async def report_summary(
         for d in _expected_days_for_staff(
             s, all_days, exclude_weekends, national_holidays, holidays_by_campus
         ):
+            day_leaves = [lv for lv in staff_leaves if lv.start_date <= d <= lv.end_date]
+            hourly_leaves = [lv for lv in day_leaves if lv.start_time is not None]
+
             bucket = grouped.get((s.id, d))
             if bucket and bucket.first_in is not None:
-                if campus and campus.shift_start is not None:
+                # An hourly leave covering the shift start exempts the day from
+                # lateness (the person was authorised to arrive later).
+                exempt_late = bool(
+                    hourly_leaves
+                    and campus
+                    and campus.shift_start is not None
+                    and any(
+                        lv.start_time <= campus.shift_start <= lv.end_time
+                        for lv in hourly_leaves
+                    )
+                )
+                if campus and campus.shift_start is not None and not exempt_late:
                     shift_start_local = datetime.combine(d, campus.shift_start, tzinfo=tz)
                     minutes_late = (bucket.first_in - shift_start_local).total_seconds() / 60
                     if minutes_late > threshold_minutes:
@@ -300,8 +314,13 @@ async def report_summary(
                     else:
                         on_time[s.id] += 1
                 else:
-                    on_time[s.id] += 1  # present; no shift configured to judge lateness
-            elif any(lv.start_date <= d <= lv.end_date for lv in staff_leaves):
+                    on_time[s.id] += 1  # present; no shift / exempt by hourly leave
+                # Also flag the day as on-leave so partial (hourly) leave shows in
+                # the İzinliler list even though the person did come in and scan.
+                if hourly_leaves:
+                    on_leave[s.id] += 1
+            elif day_leaves:
+                # No scan but a leave (full-day or hourly) covers the day.
                 on_leave[s.id] += 1
             else:
                 absent[s.id] += 1

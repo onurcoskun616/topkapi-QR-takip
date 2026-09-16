@@ -170,6 +170,66 @@ def test_scan_blocked_during_active_leave_and_unblocked_after_cancel(client, see
     assert r.status_code == 200
 
 
+def test_hourly_leave_blocks_scan_only_in_window(client, seeded):
+    from datetime import datetime, time
+    from zoneinfo import ZoneInfo
+    from app.config import settings
+
+    today = _today_local().isoformat()
+    now_t = datetime.now(ZoneInfo(settings.attendance_timezone)).time()
+
+    # A window covering the whole day → the staff member is blocked right now.
+    r = client.post(
+        "/api/leaves",
+        headers=seeded["dir_a_headers"],
+        json={
+            "user_id": seeded["staff_id"], "leave_type": "Saatlik izin",
+            "start_date": today, "end_date": today,
+            "start_time": "00:00", "end_time": "23:59:59",
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["start_time"].startswith("00:00")
+    blocking_id = r.json()["id"]
+
+    qr = client.get("/api/qr/token").json()["token"]
+    r = client.post("/api/scan", headers=seeded["staff_headers"], json={"qr_token": qr})
+    assert r.status_code == 409
+    assert "iznindesiniz" in r.json()["detail"]
+
+    # Replace it with a window that does NOT contain "now" → scan is allowed.
+    client.post(f"/api/leaves/{blocking_id}/cancel", headers=seeded["dir_a_headers"])
+    win = ("00:00", "00:30") if now_t >= time(1, 0) else ("23:00", "23:59")
+    r = client.post(
+        "/api/leaves",
+        headers=seeded["dir_a_headers"],
+        json={
+            "user_id": seeded["staff_id"], "leave_type": "Saatlik izin",
+            "start_date": today, "end_date": today,
+            "start_time": win[0], "end_time": win[1],
+        },
+    )
+    assert r.status_code == 201, r.text
+    qr = client.get("/api/qr/token").json()["token"]
+    r = client.post("/api/scan", headers=seeded["staff_headers"], json={"qr_token": qr})
+    assert r.status_code == 200, r.text
+
+
+def test_hourly_leave_must_be_single_day(client, seeded):
+    today = _today_local()
+    r = client.post(
+        "/api/leaves",
+        headers=seeded["dir_a_headers"],
+        json={
+            "user_id": seeded["staff_id"], "leave_type": "Saatlik izin",
+            "start_date": today.isoformat(),
+            "end_date": (today + timedelta(days=1)).isoformat(),
+            "start_time": "09:00", "end_time": "11:00",
+        },
+    )
+    assert r.status_code == 422
+
+
 # --------------------------------------------------------------------------- #
 # QR token status — lets a kiosk notice its own code was scanned and roll
 # over immediately, instead of waiting out the rest of its 15s window. Each

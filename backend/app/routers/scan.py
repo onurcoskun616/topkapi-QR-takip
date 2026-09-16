@@ -42,18 +42,34 @@ async def scan(
     db: AsyncSession = Depends(get_db),
 ):
     # --- 0. Blocked while an active leave/absence record covers today -------
-    today_local = datetime.now(timezone.utc).astimezone(
+    now_local = datetime.now(timezone.utc).astimezone(
         ZoneInfo(settings.attendance_timezone)
-    ).date()
+    )
+    today_local = now_local.date()
     leave = await get_active_leave_for_day(db, current.id, today_local)
     if leave is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"Bugün için '{leave.leave_type}' durumu kayıtlı. "
-                "Bir hata olduğunu düşünüyorsanız kampüs müdürünüze başvurun."
-            ),
-        )
+        # Hourly leave (start_time/end_time set) only blocks scanning during that
+        # window; outside it the staff member scans normally. A full-day leave
+        # (no times) blocks the whole day, as before.
+        if leave.start_time is not None and leave.end_time is not None:
+            if leave.start_time <= now_local.time() <= leave.end_time:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Şu an ({leave.start_time.strftime('%H:%M')}–"
+                        f"{leave.end_time.strftime('%H:%M')}) '{leave.leave_type}' "
+                        "iznindesiniz. Bir hata olduğunu düşünüyorsanız kampüs "
+                        "müdürünüze başvurun."
+                    ),
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Bugün için '{leave.leave_type}' durumu kayıtlı. "
+                    "Bir hata olduğunu düşünüyorsanız kampüs müdürünüze başvurun."
+                ),
+            )
 
     # --- 1. Validate the QR token (signature + expiry on the SERVER clock) ---
     try:

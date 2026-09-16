@@ -19,6 +19,7 @@ from ..deps import get_current_active_staff, get_current_manager
 from ..models import Campus, LeaveRecord, LeaveStatus, User, utcnow
 from ..notifications import notify_user_background
 from ..schemas import (
+    _validate_leave_times,
     LeaveRecordCreate,
     LeaveRecordResponse,
     LeaveRecordUpdate,
@@ -54,6 +55,8 @@ async def _to_response(db: AsyncSession, leave: LeaveRecord) -> LeaveRecordRespo
         leave_type=leave.leave_type,
         start_date=leave.start_date,
         end_date=leave.end_date,
+        start_time=leave.start_time,
+        end_time=leave.end_time,
         note=leave.note,
         status=leave.status,
         self_requested=leave.created_by_id == leave.user_id,
@@ -111,6 +114,8 @@ async def create_leave_request(
         leave_type=payload.leave_type.strip(),
         start_date=payload.start_date,
         end_date=payload.end_date,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
         note=payload.note,
         status=LeaveStatus.requested,
         created_by_id=staff.id,  # self-request marker
@@ -161,6 +166,8 @@ async def create_leave(
         leave_type=payload.leave_type.strip(),
         start_date=payload.start_date,
         end_date=payload.end_date,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
         note=payload.note,
         status=LeaveStatus.active,
         created_by_id=manager.id,
@@ -188,15 +195,19 @@ async def update_leave(
         leave.start_date = payload.start_date
     if payload.end_date is not None:
         leave.end_date = payload.end_date
+    if payload.start_time is not None:
+        leave.start_time = payload.start_time
+    if payload.end_time is not None:
+        leave.end_time = payload.end_time
     if payload.note is not None:
         leave.note = payload.note
     if payload.status is not None:
         leave.status = payload.status
 
-    if leave.end_date < leave.start_date:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="end_date, start_date'den önce olamaz."
-        )
+    try:
+        _validate_leave_times(leave.start_date, leave.end_date, leave.start_time, leave.end_time)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     await db.commit()
     await db.refresh(leave)

@@ -307,35 +307,52 @@ class ManualAttendanceCreate(BaseModel):
 # --------------------------------------------------------------------------- #
 # Leave / absence records
 # --------------------------------------------------------------------------- #
+def _validate_leave_times(start_date, end_date, start_time, end_time):
+    """Shared rules for leave date/time. Hourly leave (times set) must be a
+    single day and end after it starts; a partial time (only one set) is rejected."""
+    if end_date < start_date:
+        raise ValueError("end_date, start_date'den önce olamaz.")
+    if (start_time is None) != (end_time is None):
+        raise ValueError("Saatlik izin için başlangıç ve bitiş saati birlikte girilmelidir.")
+    if start_time is not None:
+        if start_date != end_date:
+            raise ValueError("Saatlik izin tek bir gün için verilebilir (başlangıç = bitiş tarihi).")
+        if end_time <= start_time:
+            raise ValueError("Bitiş saati, başlangıç saatinden sonra olmalıdır.")
+
+
 class LeaveRecordCreate(BaseModel):
     user_id: int
     leave_type: str = Field(min_length=2, max_length=80)
     start_date: date
     end_date: date
+    start_time: time | None = None
+    end_time: time | None = None
     note: str | None = Field(default=None, max_length=255)
 
     @model_validator(mode="after")
     def _check_range(self):
-        if self.end_date < self.start_date:
-            raise ValueError("end_date, start_date'den önce olamaz.")
+        _validate_leave_times(self.start_date, self.end_date, self.start_time, self.end_time)
         return self
 
 
 class StaffLeaveRequestCreate(BaseModel):
     """A staff member's own leave request from the PWA. They pick the leave
-    *kind* (Ücretli/Ücretsiz izin, Sağlık raporu, …) and a date range; it lands
-    as ``requested`` for their campus director to approve or reject. It does not
-    block scanning until a manager approves it."""
+    *kind* (Ücretli/Ücretsiz izin, Sağlık raporu, …) and a date range (or a
+    single day with hours for hourly leave); it lands as ``requested`` for their
+    campus director to approve or reject. It does not block scanning until a
+    manager approves it."""
 
     leave_type: str = Field(min_length=2, max_length=80)
     start_date: date
     end_date: date
+    start_time: time | None = None
+    end_time: time | None = None
     note: str | None = Field(default=None, max_length=255)
 
     @model_validator(mode="after")
     def _check_range(self):
-        if self.end_date < self.start_date:
-            raise ValueError("end_date, start_date'den önce olamaz.")
+        _validate_leave_times(self.start_date, self.end_date, self.start_time, self.end_time)
         return self
 
 
@@ -346,6 +363,8 @@ class LeaveRecordUpdate(BaseModel):
     leave_type: str | None = Field(default=None, min_length=2, max_length=80)
     start_date: date | None = None
     end_date: date | None = None
+    start_time: time | None = None
+    end_time: time | None = None
     note: str | None = Field(default=None, max_length=255)
     status: LeaveStatus | None = None
 
@@ -360,6 +379,8 @@ class LeaveRecordResponse(BaseModel):
     leave_type: str
     start_date: date
     end_date: date
+    start_time: time | None = None
+    end_time: time | None = None
     note: str | None = None
     status: LeaveStatus
     # True when the staff member opened this themselves from the PWA (a request
